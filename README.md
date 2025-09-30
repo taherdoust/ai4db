@@ -236,23 +236,49 @@ Our methodology is grounded in peer-reviewed research:
 - **Chen et al. (2024)** - Enhancing LLM Fine-tuning for Text-to-SQLs (arXiv:2410.01869)
 
 ### **Function Usage Frequency Classification**
-Based on PostGIS documentation analysis and real-world usage patterns:
+**Important Note:** This classification is based on empirical analysis of common GIS workflows, spatial analysis tutorials, and educational materials - NOT on official PostGIS documentation statistics (which do not exist).
+
+**Methodology for Frequency Classification:**
+The frequency levels are derived from analysis of:
+- **GIS Education Materials**: Common functions taught in spatial analysis courses
+- **PostGIS Tutorial Patterns**: Functions frequently used in online tutorials and guides  
+- **Spatial Analysis Workflows**: Basic operations (intersects, buffer) vs. specialized operations (clustering, 3D)
+- **OGC Simple Features Standard**: Core geometric predicates vs. extended operations
+- **Practical Spatial Applications**: Functions needed for typical mapping and analysis tasks
 
 ```python
 FUNCTION_FREQUENCY = {
-    # VERY_HIGH: Core functions used in 75%+ of spatial queries (12 functions)
+    # VERY_HIGH: Core functions in basic spatial analysis (12 functions)
     "ST_Intersects", "ST_Contains", "ST_Within", "ST_Distance", 
     "ST_Area", "ST_Length", "ST_Buffer", "ST_MakePoint", 
     "ST_Transform", "ST_X", "ST_Y", "ST_IsValid"
     
-    # HIGH: Functions used in 50-75% of queries (8 functions)
+    # HIGH: Common functions in intermediate workflows (8 functions)
     "ST_Union", "ST_Touches", "ST_Overlaps", "ST_SetSRID", 
     "ST_Centroid", "ST_GeomFromText", "ST_Envelope", "ST_DWithin"
     
-    # MEDIUM: Functions used in 25-50% of queries (10 functions)
-    # LOW: Specialized functions used in <25% of queries (35 functions)
+    # MEDIUM: Functions for specific analysis tasks (10 functions)
+    # LOW: Specialized functions for advanced/domain-specific use (35 functions)
 }
 ```
+
+### **What PostGIS Documentation Actually Contains**
+
+While PostGIS documentation doesn't provide function usage statistics, it does contain:
+
+**📍 Exact PostGIS Documentation Locations:**
+- **Function Reference**: [Chapter 8 - Reference](https://postgis.net/docs/reference.html) - Complete function catalog
+- **Usage Guidelines**: [Chapter 4 - Using PostGIS](https://postgis.net/docs/using_postgis_dbmanagement.html) - Performance optimization
+- **Function Index**: [PostGIS Special Functions Index](https://postgis.net/docs/PostGIS_Special_Functions_Index.html) - Functions by category
+- **Performance Tips**: [Chapter 14 - Performance Tips](https://postgis.net/docs/performance_tips.html) - Query optimization guidance
+
+**What's NOT in PostGIS Documentation:**
+- ❌ Function usage frequency statistics
+- ❌ Popularity rankings of spatial functions  
+- ❌ Query pattern analysis
+- ❌ Real-world usage data
+
+Our frequency classification is an **independent analysis** for training dataset optimization, not derived from official PostGIS sources.
 
 ##  File Structure
 
@@ -300,9 +326,9 @@ If you use this spatial SQL generator in your research, please cite:
 ```bibtex
 @software{spatial_sql_generator_2024,
   title={Enhanced Spatial SQL Generator for LLM Fine-Tuning},
-  author={Your Name},
-  year={2024},
-  url={https://github.com/your-repo/spatial-sql-generator}
+  author={Ali Taherdoustmohammadi},
+  year={2025},
+  url={https://github.com/taherdoust/ai4db}
 }
 ```
 
@@ -419,4 +445,4 @@ If you use this spatial SQL generator in your research, please cite:
 
 **Note:** All arXiv papers are freely available. For journal papers behind paywalls, check if your institution provides access, or contact the authors for preprints. Many authors also share preprints on their personal websites or ResearchGate.
 
-**Ready for immediate deployment with QLoRA infrastructure setup!** 🎯
+**Ready for immediate deployment with QLoRA infrastructure setup!** 

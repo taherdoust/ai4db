@@ -73,10 +73,10 @@ FUNC_FAMILY: Dict[str, List[str]] = {
     ]
 }
 
-# Function usage frequency classification based on academic research
-# Reference: Chen, J., et al. (2008) "Spatial SQL Query Pattern Analysis"
+# Function usage frequency classification based on empirical analysis
+# Note: Based on common GIS workflows and educational materials, not official PostGIS statistics
 FUNCTION_FREQUENCY: Dict[str, str] = {
-    # VERY_HIGH: Core functions used in 75%+ of spatial queries
+    # VERY_HIGH: Core functions in basic spatial analysis
     "ST_Intersects": "VERY_HIGH",
     "ST_Contains": "VERY_HIGH", 
     "ST_Within": "VERY_HIGH",
@@ -90,7 +90,7 @@ FUNCTION_FREQUENCY: Dict[str, str] = {
     "ST_Y": "VERY_HIGH",
     "ST_IsValid": "VERY_HIGH",
     
-    # HIGH: Functions used in 50-75% of queries
+    # HIGH: Common functions in intermediate workflows
     "ST_Union": "HIGH",
     "ST_Touches": "HIGH",
     "ST_Overlaps": "HIGH",
@@ -100,7 +100,7 @@ FUNCTION_FREQUENCY: Dict[str, str] = {
     "ST_Envelope": "HIGH",
     "ST_DWithin": "HIGH",
     
-    # MEDIUM: Functions used in 25-50% of queries
+    # MEDIUM: Functions for specific analysis tasks
     "ST_Difference": "MEDIUM",
     "ST_Intersection": "MEDIUM",
     "ST_Crosses": "MEDIUM",
@@ -112,7 +112,7 @@ FUNCTION_FREQUENCY: Dict[str, str] = {
     "ST_EndPoint": "MEDIUM",
     "ST_MakeValid": "MEDIUM",
     
-    # LOW: Specialized functions used in <25% of queries
+    # LOW: Specialized functions for advanced/domain-specific use
     "ST_Perimeter": "LOW",
     "ST_3DDistance": "LOW",
     "ST_MaxDistance": "LOW",

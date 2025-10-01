@@ -1,0 +1,47 @@
+\documentclass[11pt,a4paper]{article}
+
+% --------- Packages ----------
+\usepackage[margin=1in]{geometry}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{amsmath,amssymb}
+\usepackage{enumitem}
+\usepackage{csquotes}
+\usepackage[numbers,sort&compress]{natbib}
+
+\graphicspath{{figures/}}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=black,
+  citecolor=blue!50!black,
+  urlcolor=blue!60!black
+}
+
+% --------- Metadata ----------
+\title{txt2sql: From Literature to a Practical, Modular Text-to-SQL System with Spatial Extensions}
+\author{Names}
+\date{December 5, 2025}
+
+% --------- Document ----------
+\begin{document}
+\maketitle
+
+\begin{abstract}
+We present a modular Text-to-SQL pipeline tailored for large, real-world databases and spatial workloads.
+The system integrates (i) evidence-grounded dataset generation for spatial SQL (PostGIS/SpatiaLite), (ii) a pragmatic methodology for environment setup and reproducible data creation, and (iii) an evaluation plan aligned to current large-scale benchmarks. We contrast our design choices with recent advances on BIRD and multi-agent SQL synthesis.
+\end{abstract}
+
+\section*{How to Read this Paper}
+The core sections are modular: \textbf{Literature Review} (\S\ref{sec:lit}), \textbf{Methodology} (\S\ref{sec:method}), \textbf{Results/Findings} (\S\ref{sec:results}), and \textbf{Conclusion} (\S\ref{sec:conclusion}).
+
+\input{sections/literature_review}
+\input{sections/methodology}
+\input{sections/results}
+\input{sections/conclusion}
+
+\bibliographystyle{unsrtnat}
+\bibliography{references}
+\end{document}

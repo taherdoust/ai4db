@@ -1,0 +1,244 @@
+================================================================================
+DATABASE 1: ADA (Administrative Division of China)
+================================================================================
+
+DOMAIN: Chinese administrative geography, infrastructure, and natural features
+FOCUS: Provinces, cities, airports, railways, lakes, and rivers across China
+
+================================================================================
+TABLE 1: airports
+================================================================================
+DESCRIPTION: Records information about various airports in China
+
+CREATE TABLE "airports" (
+    IATA TEXT NOT NULL,                    -- IATA airport code (3-letter)
+    runway_number INTEGER NOT NULL,         -- Number of runways
+    airfield_area_class TEXT NOT NULL,     -- Classification of airfield area
+    name TEXT PRIMARY KEY,                  -- Airport name (unique identifier)
+    location POINT NOT NULL                 -- SPATIAL: Airport location coordinates
+);
+
+COLUMN DETAILS:
+┌─────────────────────┬─────────┬─────────────────────────────────────────────┐
+│ Column              │ Type    │ Description                                 │
+├─────────────────────┼─────────┼─────────────────────────────────────────────┤
+│ IATA                │ TEXT    │ International Air Transport Association     │
+│                     │         │ code (e.g., "PEK" for Beijing)              │
+│ runway_number       │ INTEGER │ Total number of runways available           │
+│ airfield_area_class │ TEXT    │ Airport size classification (e.g., "4E")    │
+│ name                │ TEXT    │ Official airport name (Primary Key)         │
+│ location            │ POINT   │ SPATIAL: GPS coordinates of airport         │
+└─────────────────────┴─────────┴─────────────────────────────────────────────┘
+
+================================================================================
+TABLE 2: cities
+================================================================================
+DESCRIPTION: Records information about various cities in China
+
+CREATE TABLE "cities" (
+    name TEXT PRIMARY KEY,                          -- City name (unique)
+    province TEXT REFERENCES provinces(name),       -- ⚠️ DERIVED: Province name
+    administrative_division_code TEXT NOT NULL,     -- Administrative code
+    administrative_division_category TEXT NOT NULL, -- City category
+    eng_name TEXT NOT NULL,                        -- English name
+    shape MULTIPOLYGON NOT NULL                    -- SPATIAL: City boundary
+);
+
+COLUMN DETAILS:
+┌──────────────────────────────────┬──────────────┬──────────┬─────────────────────────────┐
+│ Column                           │ Type         │ Derived? │ Description                 │
+├──────────────────────────────────┼──────────────┼──────────┼─────────────────────────────┤
+│ name                             │ TEXT         │ NO       │ Chinese city name           │
+│ province                         │ TEXT         │ YES ✓    │ Province name               │
+│                                  │              │          │ Can be computed spatially   │
+│                                  │              │          │ via Contains()/Within()     │
+│ administrative_division_code     │ TEXT         │ NO       │ 6-digit administrative code │
+│                                  │              │          │ (e.g., "110000")            │
+│ administrative_division_category │ TEXT         │ NO       │ City type: "地级市",        │
+│                                  │              │          │ "县级市", etc.              │
+│ eng_name                         │ TEXT         │ NO       │ Romanized/English name      │
+│ shape                            │ MULTIPOLYGON │ NO       │ SPATIAL: City polygon       │
+│                                  │              │          │ boundary                    │
+└──────────────────────────────────┴──────────────┴──────────┴─────────────────────────────┘
+
+DERIVED COLUMN COMPUTATION:
+- province: SELECT p.name FROM provinces p WHERE Contains(p.shape, c.shape)
+
+================================================================================
+TABLE 3: lakes
+================================================================================
+DESCRIPTION: Records information about various lakes in China
+
+CREATE TABLE "lakes" (
+    HYD1_4M_ID INTEGER PRIMARY KEY,       -- Hydrological feature ID
+    Perimeter DOUBLE NOT NULL,             -- ⚠️ DERIVED: Lake perimeter
+    Area DOUBLE,                           -- ⚠️ DERIVED: Lake area
+    GBCODE TEXT NOT NULL,                 -- National geographic code
+    name TEXT NOT NULL,                    -- Lake name
+    level_lake INTEGER NOT NULL,           -- Lake classification level
+    shape POLYGON NOT NULL                 -- SPATIAL: Lake polygon
+);
+
+COLUMN DETAILS:
+┌──────────────┬─────────┬──────────┬──────────────────────────────────────────┐
+│ Column       │ Type    │ Derived? │ Description                              │
+├──────────────┼─────────┼──────────┼──────────────────────────────────────────┤
+│ HYD1_4M_ID   │ INTEGER │ NO       │ Unique hydrological feature ID           │
+│ Perimeter    │ DOUBLE  │ YES ✓    │ Perimeter in meters                      │
+│ Area         │ DOUBLE  │ YES ✓    │ Area in square meters                    │
+│ GBCODE       │ TEXT    │ NO       │ National geographic code                 │
+│ name         │ TEXT    │ NO       │ Lake name (e.g., "太湖", "洞庭湖")       │
+│ level_lake   │ INTEGER │ NO       │ Classification level: 1, 2, 3, 4         │
+│ shape        │ POLYGON │ NO       │ SPATIAL: Lake boundary polygon           │
+└──────────────┴─────────┴──────────┴──────────────────────────────────────────┘
+
+DERIVED COLUMN COMPUTATIONS:
+- Perimeter: GLength(shape, 1)
+- Area: Area(shape, 1)
+
+IMPORTANT NOTE:
+Some lakes (like "太湖") consist of multiple polygons with the same name.
+Use SUM() aggregation when computing total area/perimeter.
+
+================================================================================
+TABLE 4: provinces
+================================================================================
+DESCRIPTION: Records GDP, population, and spatial information for Chinese provinces
+
+CREATE TABLE "provinces" (
+    name TEXT PRIMARY KEY,                  -- Province name
+    GDP_1994 DOUBLE NOT NULL,              -- GDP in 1994
+    GDP_1997 DOUBLE NOT NULL,              -- GDP in 1997
+    GDP_1998 DOUBLE NOT NULL,              -- GDP in 1998
+    GDP_1999 DOUBLE NOT NULL,              -- GDP in 1999
+    GDP_2000 DOUBLE NOT NULL,              -- GDP in 2000
+    pinyin_name TEXT NOT NULL,             -- Romanized name
+    Pop_0_14 DOUBLE NOT NULL,              -- Population aged 0-14
+    Pop_15_64 DOUBLE NOT NULL,             -- Population aged 15-64
+    Pop_65Plus DOUBLE NOT NULL,            -- Population aged 65+
+    Pop_Female DOUBLE NOT NULL,            -- Female population
+    Pop_Han DOUBLE NOT NULL,               -- Han ethnicity population
+    Pop_Male DOUBLE NOT NULL,              -- Male population
+    Pop_Minori DOUBLE NOT NULL,            -- Ethnic minority population
+    Pop_Rural DOUBLE NOT NULL,             -- Rural population
+    Pop_Urban DOUBLE NOT NULL,             -- Urban population
+    POPU DOUBLE NOT NULL,                  -- Total current population
+    administrative_divison_code TEXT NOT NULL, -- Admin code
+    shape MULTIPOLYGON NOT NULL            -- SPATIAL: Province boundary
+);
+
+COLUMN DETAILS:
+┌──────────────────────────────┬──────────────┬──────────────────────────────────────┐
+│ Column                       │ Type         │ Description                          │
+├──────────────────────────────┼──────────────┼──────────────────────────────────────┤
+│ name                         │ TEXT         │ Province name (Primary Key)          │
+│ GDP_1994 - GDP_2000          │ DOUBLE       │ Gross Domestic Product for years     │
+│                              │              │ 1994, 1997, 1998, 1999, 2000         │
+│ pinyin_name                  │ TEXT         │ Romanized province name              │
+│ Pop_0_14                     │ DOUBLE       │ Population aged 0-14                 │
+│ Pop_15_64                    │ DOUBLE       │ Population aged 15-64                │
+│ Pop_65Plus                   │ DOUBLE       │ Population aged 65 and above         │
+│ Pop_Female                   │ DOUBLE       │ Female population count              │
+│ Pop_Han                      │ DOUBLE       │ Han ethnicity population             │
+│ Pop_Male                     │ DOUBLE       │ Male population count                │
+│ Pop_Minori                   │ DOUBLE       │ Ethnic minority population           │
+│ Pop_Rural                    │ DOUBLE       │ Rural population count               │
+│ Pop_Urban                    │ DOUBLE       │ Urban population count               │
+│ POPU                         │ DOUBLE       │ Total current population             │
+│ administrative_divison_code  │ TEXT         │ Administrative division code         │
+│ shape                        │ MULTIPOLYGON │ SPATIAL: Province boundary polygon   │
+└──────────────────────────────┴──────────────┴──────────────────────────────────────┘
+
+KEY FIELDS EXPLANATION:
+- Pop_65Plus: Records the population aged 65 and above in this province
+- Pop_Minori: Records the ethnic minority population count in this province
+- POPU: Records the current total population of this province
+
+================================================================================
+TABLE 5: rails
+================================================================================
+DESCRIPTION: Records information about various railway segments in China
+
+CREATE TABLE "rails" (
+    objectID INTEGER PRIMARY KEY,          -- Unique rail segment ID
+    Shape_Length DOUBLE NOT NULL,          -- ⚠️ DERIVED: Railway length
+    entityID TEXT NOT NULL,                -- Entity identifier
+    name TEXT NOT NULL,                    -- Railway line name
+    classID TEXT NOT NULL,                 -- Railway classification
+    shape MULTILINESTRING NOT NULL         -- SPATIAL: Railway line
+);
+
+COLUMN DETAILS:
+┌──────────────┬─────────────────┬──────────┬──────────────────────────────────────┐
+│ Column       │ Type            │ Derived? │ Description                          │
+├──────────────┼─────────────────┼──────────┼──────────────────────────────────────┤
+│ objectID     │ INTEGER         │ NO       │ Unique rail segment identifier       │
+│ Shape_Length │ DOUBLE          │ YES ✓    │ Total length of railway in meters    │
+│ entityID     │ TEXT            │ NO       │ Entity identifier                    │
+│ name         │ TEXT            │ NO       │ Railway line name (e.g., "京广线")   │
+│ classID      │ TEXT            │ NO       │ Railway classification ID            │
+│ shape        │ MULTILINESTRING │ NO       │ SPATIAL: Railway route geometry      │
+└──────────────┴─────────────────┴──────────┴──────────────────────────────────────┘
+
+DERIVED COLUMN COMPUTATION:
+- Shape_Length: GLength(shape, 1)
+
+IMPORTANT NOTE:
+Railway lines (like "京广线") may consist of multiple segments with the same name.
+
+================================================================================
+TABLE 6: rivers
+================================================================================
+DESCRIPTION: Records information about various river segments in China
+
+CREATE TABLE "rivers" (
+    HYD1_4M_ID INTEGER PRIMARY KEY,        -- Hydrological feature ID
+    length DOUBLE NOT NULL,                -- ⚠️ DERIVED: River segment length
+    fnode INTEGER NOT NULL,                -- From-node (topology)
+    tnode INTEGER NOT NULL,                -- To-node (topology)
+    lpoly INTEGER NOT NULL,                -- Left polygon ID
+    rpoly INTEGER NOT NULL,                -- Right polygon ID
+    GBCODE TEXT NOT NULL,                  -- Geographic code
+    name TEXT NOT NULL,                    -- River name
+    level_river INTEGER NOT NULL,          -- River classification level
+    shape LINESTRING NOT NULL              -- SPATIAL: River centerline
+);
+
+COLUMN DETAILS:
+┌──────────────┬────────────┬──────────┬──────────────────────────────────────────┐
+│ Column       │ Type       │ Derived? │ Description                              │
+├──────────────┼────────────┼──────────┼──────────────────────────────────────────┤
+│ HYD1_4M_ID   │ INTEGER    │ NO       │ Unique hydrological feature ID           │
+│ length       │ DOUBLE     │ YES ✓    │ River segment length in meters           │
+│ fnode        │ INTEGER    │ NO       │ From-node for topological connectivity   │
+│ tnode        │ INTEGER    │ NO       │ To-node for topological connectivity     │
+│ lpoly        │ INTEGER    │ NO       │ Left polygon ID (adjacent polygon)       │
+│ rpoly        │ INTEGER    │ NO       │ Right polygon ID (adjacent polygon)      │
+│ GBCODE       │ TEXT       │ NO       │ National geographic code                 │
+│ name         │ TEXT       │ NO       │ River name (e.g., "长江", "黄河")        │
+│ level_river  │ INTEGER    │ NO       │ River classification: 1, 2, 3, 4         │
+│ shape        │ LINESTRING │ NO       │ SPATIAL: River centerline geometry       │
+└──────────────┴────────────┴──────────┴──────────────────────────────────────────┘
+
+DERIVED COLUMN COMPUTATION:
+- length: GLength(shape, 1)
+
+IMPORTANT NOTE:
+Major rivers (like "长江" - Yangtze River) consist of multiple segments with the 
+same name. Use SUM() aggregation when computing total river length.
+
+================================================================================
+SUMMARY: DERIVED COLUMNS IN ADA DATABASE
+================================================================================
+
+Table          | Derived Column    | Spatial Function           | Description
+---------------|-------------------|----------------------------|---------------------------
+cities         | province          | Contains() / Within()      | Spatial join with provinces
+lakes          | Perimeter         | GLength(shape, 1)          | Lake perimeter calculation
+lakes          | Area              | Area(shape, 1)             | Lake area calculation
+rivers         | length            | GLength(shape, 1)          | River segment length
+rails          | Shape_Length      | GLength(shape, 1)          | Railway segment length
+
+================================================================================
+END OF ADA DATABASE METADATA
+================================================================================

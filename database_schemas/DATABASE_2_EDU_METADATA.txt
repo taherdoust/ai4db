@@ -1,0 +1,190 @@
+================================================================================
+DATABASE 2: EDU (Education)
+================================================================================
+
+DOMAIN: Chinese higher education institutions
+FOCUS: Universities and their geographic distribution across China
+
+================================================================================
+TABLE 1: cities
+================================================================================
+DESCRIPTION: Records location and population information of various cities in China
+
+CREATE TABLE "cities" (
+    name TEXT PRIMARY KEY,                          -- City name
+    administrative_division_code TEXT NOT NULL,     -- Admin code
+    administrative_division_category TEXT NOT NULL, -- City type
+    POP2020 INTEGER NOT NULL,                      -- Population in 2020
+    POP2010 INTEGER NOT NULL,                      -- Population in 2010
+    POP2000 INTEGER NOT NULL,                      -- Population in 2000
+    shape MULTIPOLYGON NOT NULL,                   -- SPATIAL: City boundary
+    province TEXT REFERENCES provinces(name),       -- ⚠️ DERIVED: Province
+    Shape_Area DOUBLE,                             -- ⚠️ DERIVED: Area
+    Shape_Length DOUBLE                            -- ⚠️ DERIVED: Perimeter
+);
+
+COLUMN DETAILS:
+┌──────────────────────────────────┬──────────────┬──────────┬──────────────────────────────┐
+│ Column                           │ Type         │ Derived? │ Description                  │
+├──────────────────────────────────┼──────────────┼──────────┼──────────────────────────────┤
+│ name                             │ TEXT         │ NO       │ City name (Primary Key)      │
+│ administrative_division_code     │ TEXT         │ NO       │ Administrative division code │
+│ administrative_division_category │ TEXT         │ NO       │ City category/type           │
+│ POP2020                          │ INTEGER      │ NO       │ Population count in 2020     │
+│ POP2010                          │ INTEGER      │ NO       │ Population count in 2010     │
+│ POP2000                          │ INTEGER      │ NO       │ Population count in 2000     │
+│ shape                            │ MULTIPOLYGON │ NO       │ SPATIAL: City boundary       │
+│ province                         │ TEXT         │ YES ✓    │ Province name (FK)           │
+│ Shape_Area                       │ DOUBLE       │ YES ✓    │ City area in square meters   │
+│ Shape_Length                     │ DOUBLE       │ YES ✓    │ City perimeter in meters     │
+└──────────────────────────────────┴──────────────┴──────────┴──────────────────────────────┘
+
+DERIVED COLUMN COMPUTATIONS:
+- province: SELECT p.name FROM provinces p WHERE Contains(p.shape, c.shape)
+            or Within(c.shape, p.shape)
+- Shape_Area: Area(shape, 1)
+- Shape_Length: GLength(ST_Boundary(shape), 1)
+
+================================================================================
+TABLE 2: provinces
+================================================================================
+DESCRIPTION: Records information about the various provinces in China
+
+CREATE TABLE "provinces" (
+    name TEXT PRIMARY KEY,                  -- Province name
+    pinyin_name TEXT NOT NULL,             -- Romanized name
+    administrative_division_code TEXT NOT NULL, -- Admin code
+    shape MULTIPOLYGON NOT NULL            -- SPATIAL: Province boundary
+);
+
+COLUMN DETAILS:
+┌──────────────────────────────┬──────────────┬──────────────────────────────────┐
+│ Column                       │ Type         │ Description                      │
+├──────────────────────────────┼──────────────┼──────────────────────────────────┤
+│ name                         │ TEXT         │ Province name (Primary Key)      │
+│ pinyin_name                  │ TEXT         │ Romanized/Pinyin province name   │
+│ administrative_division_code │ TEXT         │ Administrative division code     │
+│ shape                        │ MULTIPOLYGON │ SPATIAL: Province boundary       │
+└──────────────────────────────┴──────────────┴──────────────────────────────────┘
+
+================================================================================
+TABLE 3: universities
+================================================================================
+DESCRIPTION: Records information about various universities in China
+
+CREATE TABLE "universities" (
+    name TEXT PRIMARY KEY,                          -- University name
+    academic_discipline_category TEXT NOT NULL,     -- Discipline type
+    operation_type TEXT NOT NULL,                   -- Public/Private
+    educational_level TEXT NOT NULL,                -- Undergraduate/Vocational
+    project_985 INTEGER NOT NULL,                   -- Project 985 status
+    project_211 INTEGER NOT NULL,                   -- Project 211 status
+    double_tops INTEGER NOT NULL,                   -- Double First-Class status
+    affiliation TEXT,                              -- Governing body
+    address TEXT,                                  -- Street address
+    location POINT NOT NULL,                       -- SPATIAL: University location
+    province TEXT REFERENCES provinces(name),       -- Province name
+    city TEXT REFERENCES cities(name),             -- City name
+    CONSTRAINT check_985 CHECK (project_985 IN (0, 1)),
+    CONSTRAINT check_211 CHECK (project_211 IN (0, 1)),
+    CONSTRAINT check_double CHECK (double_tops IN (0, 1))
+);
+
+COLUMN DETAILS:
+┌──────────────────────────────┬───────┬──────────────────────────────────────────────┐
+│ Column                       │ Type  │ Description                                  │
+├──────────────────────────────┼───────┼──────────────────────────────────────────────┤
+│ name                         │ TEXT  │ University name (Primary Key)                │
+│ academic_discipline_category │ TEXT  │ University category                          │
+│ operation_type               │ TEXT  │ Public or private operation                  │
+│ educational_level            │ TEXT  │ Undergraduate or vocational                  │
+│ project_985                  │ INT   │ Project 985 designation (0=No, 1=Yes)        │
+│ project_211                  │ INT   │ Project 211 designation (0=No, 1=Yes)        │
+│ double_tops                  │ INT   │ Double First-Class status (0=No, 1=Yes)      │
+│ affiliation                  │ TEXT  │ Ministry/Province affiliation                │
+│ address                      │ TEXT  │ Street address of university                 │
+│ location                     │ POINT │ SPATIAL: GPS coordinates                     │
+│ province                     │ TEXT  │ Province name (Foreign Key)                  │
+│ city                         │ TEXT  │ City name (Foreign Key)                      │
+└──────────────────────────────┴───────┴──────────────────────────────────────────────┘
+
+FIELD VALUES AND MEANINGS:
+
+academic_discipline_category:
+    "综合类" - Comprehensive
+    "理工类" - Science and Engineering
+    "师范类" - Teacher Education/Normal
+    "财经类" - Finance and Economics
+    "医药类" - Medical
+    "艺术类" - Arts
+    "农林类" - Agriculture and Forestry
+    "政法类" - Politics and Law
+    "民族类" - Ethnic/Minority-focused
+    "体育类" - Sports/Physical Education
+
+operation_type:
+    "公办" - Public (state-funded)
+    "民办" - Private
+
+educational_level:
+    "本科" - Undergraduate (Bachelor's degree programs)
+    "专科" - Vocational (Associate degree programs)
+
+project_985:
+    1 = Top-tier university designation (39 elite universities)
+    0 = Not in Project 985
+
+project_211:
+    1 = Key university designation (116 key universities)
+    0 = Not in Project 211
+
+double_tops:
+    1 = Double First-Class Initiative member
+    0 = Not in Double First-Class Initiative
+
+affiliation (examples):
+    "教育部" - Ministry of Education
+    "国家民委" - National Ethnic Affairs Commission
+    "交通运输部" - Ministry of Transport
+    "北京市" - Beijing Municipality
+    "工业和信息化部" - Ministry of Industry and Information Technology
+    "中国科学院" - Chinese Academy of Sciences
+
+QUALITY RANKINGS (FROM HIGHEST TO LOWEST):
+1. Project 985 universities (most prestigious)
+2. Project 211 universities (key national universities)
+3. Double First-Class universities (new excellence initiative)
+4. Regular universities
+
+================================================================================
+SUMMARY: DERIVED COLUMNS IN EDU DATABASE
+================================================================================
+
+Table          | Derived Column    | Spatial Function           | Description
+---------------|-------------------|----------------------------|---------------------------
+cities         | province          | Contains() / Within()      | Spatial join with provinces
+cities         | Shape_Area        | Area(shape, 1)             | City area calculation
+cities         | Shape_Length      | GLength(Boundary(shape),1) | City perimeter calculation
+
+================================================================================
+IMPORTANT NOTES
+================================================================================
+
+1. PROJECT SYSTEMS:
+   - Project 985 was launched in 1998 to build world-class universities
+   - Project 211 was launched in 1995 to strengthen key universities
+   - Double First-Class (双一流) started in 2015 as a new excellence initiative
+
+2. SPATIAL QUERIES:
+   - Universities can be located spatially using the location POINT
+   - Count universities per city/province using spatial joins
+   - Find universities within distance using Distance() function
+
+3. DATA CHARACTERISTICS:
+   - Each university appears exactly once
+   - Province and city are stored as foreign keys
+   - Location is stored as a POINT geometry for spatial queries
+
+================================================================================
+END OF EDU DATABASE METADATA
+================================================================================

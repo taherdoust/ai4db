@@ -1,0 +1,467 @@
+================================================================================
+DATABASE 4: TRAFFIC (Nanjing Transportation Network)
+================================================================================
+
+DOMAIN: Urban transportation infrastructure
+FOCUS: Nanjing city's roads, buses, subways, green spaces, and urban facilities
+
+GEOGRAPHIC SCOPE: City of Nanjing (南京市), Jiangsu Province, China
+
+================================================================================
+TABLE 1: agencies
+================================================================================
+DESCRIPTION: Records information about various government agencies in Nanjing
+
+CREATE TABLE "agencies" (
+    NAME TEXT PRIMARY KEY,                 -- Agency name
+    KIND TEXT,                             -- Agency type/category
+    Location POINT                         -- SPATIAL: Agency coordinates
+);
+
+COLUMN DETAILS:
+┌─────────┬───────┬──────────────────────────────────────────────────┐
+│ Column  │ Type  │ Description                                      │
+├─────────┼───────┼──────────────────────────────────────────────────┤
+│ NAME    │ TEXT  │ Government agency name (Primary Key)             │
+│ KIND    │ TEXT  │ Type/category of government agency               │
+│ Location│ POINT │ SPATIAL: GPS coordinates of agency location      │
+└─────────┴───────┴──────────────────────────────────────────────────┘
+
+EXAMPLES:
+- "南京市文物局" (Nanjing Municipal Cultural Relics Bureau)
+- "南京市房产局" (Nanjing Municipal Housing Bureau)
+- "江苏省海事局" (Jiangsu Provincial Maritime Safety Administration)
+
+================================================================================
+TABLE 2: buslines
+================================================================================
+DESCRIPTION: Records information about all bus routes in Nanjing
+
+CREATE TABLE "buslines" (
+    lineID TEXT PRIMARY KEY,              -- Unique bus line ID
+    name TEXT UNIQUE,                      -- Bus line name (e.g., "874路")
+    type TEXT,                             -- Bus type/category
+    distance DOUBLE,                       -- ⚠️ DERIVED: Total route length
+    start_stop TEXT,                       -- Starting bus stop
+    end_stop TEXT,                         -- Ending bus stop
+    start_time TEXT,                       -- First departure time
+    end_time TEXT,                         -- Last departure time
+    Shape LINESTRING,                      -- SPATIAL: Bus route geometry
+    FOREIGN KEY (start_stop) REFERENCES busstops(name),
+    FOREIGN KEY (end_stop) REFERENCES busstops(name)
+);
+
+COLUMN DETAILS:
+┌────────────┬────────────┬──────────┬──────────────────────────────────────────┐
+│ Column     │ Type       │ Derived? │ Description                              │
+├────────────┼────────────┼──────────┼──────────────────────────────────────────┤
+│ lineID     │ TEXT       │ NO       │ Unique bus line identifier (PK)          │
+│ name       │ TEXT       │ NO       │ Bus route name (e.g., "874路", "711路")  │
+│ type       │ TEXT       │ NO       │ Bus type/service category                │
+│ distance   │ DOUBLE     │ YES ✓    │ Total route length in meters             │
+│ start_stop │ TEXT       │ NO       │ Starting bus stop name (FK)              │
+│ end_stop   │ TEXT       │ NO       │ Ending bus stop name (FK)                │
+│ start_time │ TEXT       │ NO       │ First departure time (e.g., "0500")      │
+│ end_time   │ TEXT       │ NO       │ Last departure time                      │
+│ Shape      │ LINESTRING │ NO       │ SPATIAL: Complete bus route geometry     │
+└────────────┴────────────┴──────────┴──────────────────────────────────────────┘
+
+DERIVED COLUMN COMPUTATION:
+- distance: GLength(Shape, 1)
+
+NAMING CONVENTION:
+- Chinese bus lines typically end with "路" (lù = route)
+- Examples: "874路", "709路", "711路"
+
+================================================================================
+TABLE 3: busstops
+================================================================================
+DESCRIPTION: Records information about all bus stops in Nanjing
+
+CREATE TABLE "busstops" (
+    stopID TEXT PRIMARY KEY,              -- Stop ID
+    name TEXT UNIQUE,                      -- Stop name
+    X DOUBLE,                              -- X coordinate
+    Y DOUBLE,                              -- Y coordinate
+    lineIDs TEXT,                          -- Comma-separated line IDs
+    Location POINT                         -- SPATIAL: Stop location
+);
+
+COLUMN DETAILS:
+┌─────────┬───────┬──────────────────────────────────────────────────────┐
+│ Column  │ Type  │ Description                                          │
+├─────────┼───────┼──────────────────────────────────────────────────────┤
+│ stopID  │ TEXT  │ Unique bus stop identifier (Primary Key)             │
+│ name    │ TEXT  │ Bus stop name (Unique)                               │
+│ X       │ DOUBLE│ X coordinate (longitude)                             │
+│ Y       │ DOUBLE│ Y coordinate (latitude)                              │
+│ lineIDs │ TEXT  │ Comma-separated list of bus lines serving this stop  │
+│ Location│ POINT │ SPATIAL: GPS coordinates of bus stop                 │
+└─────────┴───────┴──────────────────────────────────────────────────────┘
+
+NOTES:
+- lineIDs contains multiple line IDs separated by commas
+- Example: "1,2,3" means lines 1, 2, and 3 serve this stop
+
+================================================================================
+TABLE 4: districts
+================================================================================
+DESCRIPTION: Records information about all administrative districts in Nanjing
+
+CREATE TABLE "districts" (
+    name TEXT PRIMARY KEY,                          -- District name
+    administrative_division_code TEXT UNIQUE,       -- Admin code
+    ENG_NAME TEXT,                                 -- English name
+    Shape POLYGON                                  -- SPATIAL: District boundary
+);
+
+COLUMN DETAILS:
+┌──────────────────────────────┬─────────┬──────────────────────────────────┐
+│ Column                       │ Type    │ Description                      │
+├──────────────────────────────┼─────────┼──────────────────────────────────┤
+│ name                         │ TEXT    │ District name in Chinese (PK)    │
+│ administrative_division_code │ TEXT    │ 6-digit admin code (Unique)      │
+│ ENG_NAME                     │ TEXT    │ English/Romanized district name  │
+│ Shape                        │ POLYGON │ SPATIAL: District boundary       │
+└──────────────────────────────┴─────────┴──────────────────────────────────┘
+
+NANJING DISTRICTS (南京市辖区):
+- 玄武区 (Xuanwu District)
+- 秦淮区 (Qinhuai District)
+- 建邺区 (Jianye District)
+- 鼓楼区 (Gulou District)
+- 浦口区 (Pukou District)
+- 栖霞区 (Qixia District)
+- 雨花台区 (Yuhuatai District)
+- 江宁区 (Jiangning District)
+- 六合区 (Luhe District)
+- 溧水区 (Lishui District)
+- 高淳区 (Gaochun District)
+
+================================================================================
+TABLE 5: greenspaces
+================================================================================
+DESCRIPTION: Records information about all green spaces in Nanjing
+             Including parks, scenic spots, tourist attractions, etc.
+
+CREATE TABLE "greenspaces" (
+    PK_UID INTEGER PRIMARY KEY AUTOINCREMENT,  -- Unique ID
+    NAME TEXT,                                  -- Park/green space name
+    KIND TEXT,                                  -- Type of green space
+    Shape_Leng DOUBLE,                         -- Perimeter
+    Shape_Area DOUBLE,                         -- ⚠️ DERIVED: Area
+    Shape POLYGON                              -- SPATIAL: Green space boundary
+);
+
+COLUMN DETAILS:
+┌────────────┬─────────┬──────────┬──────────────────────────────────────────┐
+│ Column     │ Type    │ Derived? │ Description                              │
+├────────────┼─────────┼──────────┼──────────────────────────────────────────┤
+│ PK_UID     │ INTEGER │ NO       │ Auto-incrementing unique ID (PK)         │
+│ NAME       │ TEXT    │ NO       │ Green space name                         │
+│ KIND       │ TEXT    │ NO       │ Type: park, scenic area, etc.            │
+│ Shape_Leng │ DOUBLE  │ NO       │ Perimeter in meters                      │
+│ Shape_Area │ DOUBLE  │ YES ✓    │ Area in square meters                    │
+│ Shape      │ POLYGON │ NO       │ SPATIAL: Green space boundary polygon    │
+└────────────┴─────────┴──────────┴──────────────────────────────────────────┘
+
+DERIVED COLUMN COMPUTATION:
+- Shape_Area: Area(Shape, 1)
+
+EXAMPLES:
+- "玄武湖公园" (Xuanwu Lake Park)
+- "钟山风景区" (Zhongshan Scenic Area)
+- "郑和公园" (Zheng He Park)
+
+NOTES:
+- Green spaces include: 公园 (parks), 风景名胜 (scenic spots), 
+  旅游景点 (tourist attractions)
+- Many names end with "公园" (park) or "风景区" (scenic area)
+
+================================================================================
+TABLE 6: hotels
+================================================================================
+DESCRIPTION: Records information about all hotels in Nanjing
+
+CREATE TABLE "hotels" (
+    NAME TEXT PRIMARY KEY,                 -- Hotel name
+    KIND TEXT,                             -- Hotel type/category
+    Location POINT                         -- SPATIAL: Hotel location
+);
+
+COLUMN DETAILS:
+┌─────────┬───────┬──────────────────────────────────────────────────┐
+│ Column  │ Type  │ Description                                      │
+├─────────┼───────┼──────────────────────────────────────────────────┤
+│ NAME    │ TEXT  │ Hotel name (Primary Key)                         │
+│ KIND    │ TEXT  │ Hotel type/star rating category                  │
+│ Location│ POINT │ SPATIAL: GPS coordinates of hotel                │
+└─────────┴───────┴──────────────────────────────────────────────────┘
+
+EXAMPLE:
+- "金龙大酒店" (Jinlong Grand Hotel)
+
+================================================================================
+TABLE 7: rails
+================================================================================
+DESCRIPTION: Records information about all railway segments in Nanjing
+
+CREATE TABLE "rails" (
+    gml_id TEXT PRIMARY KEY,              -- Segment ID
+    Name TEXT,                             -- Railway name
+    fclass TEXT,                           -- Feature class
+    Shape MULTILINESTRING                  -- SPATIAL: Railway route
+);
+
+COLUMN DETAILS:
+┌────────┬──────────────────┬──────────────────────────────────────────┐
+│ Column │ Type             │ Description                              │
+├────────┼──────────────────┼──────────────────────────────────────────┤
+│ gml_id │ TEXT             │ GML feature ID (Primary Key)             │
+│ Name   │ TEXT             │ Railway line name                        │
+│ fclass │ TEXT             │ Feature classification                   │
+│ Shape  │ MULTILINESTRING  │ SPATIAL: Railway route geometry          │
+└────────┴──────────────────┴──────────────────────────────────────────┘
+
+================================================================================
+TABLE 8: rivers
+================================================================================
+DESCRIPTION: Records information about all water systems in Nanjing
+             Including lakes, rivers, reservoirs, etc.
+
+CREATE TABLE "rivers" (
+    gml_id TEXT PRIMARY KEY,              -- Water feature ID
+    Name TEXT,                             -- Water body name
+    fclass TEXT,                           -- Feature class
+    Shape MULTIPOLYGON                     -- SPATIAL: Water area
+);
+
+COLUMN DETAILS:
+┌────────┬───────────────┬──────────────────────────────────────────────┐
+│ Column │ Type          │ Description                                  │
+├────────┼───────────────┼──────────────────────────────────────────────┤
+│ gml_id │ TEXT          │ GML feature ID (Primary Key)                 │
+│ Name   │ TEXT          │ Water body name                              │
+│ fclass │ TEXT          │ Feature classification                       │
+│ Shape  │ MULTIPOLYGON  │ SPATIAL: Water area polygon                  │
+└────────┴───────────────┴──────────────────────────────────────────────┘
+
+FAMOUS WATER BODIES:
+- "长江" (Yangtze River) - flows through Nanjing
+
+NOTES:
+- Water systems include: 湖泊 (lakes), 河流 (rivers), 水库 (reservoirs)
+
+================================================================================
+TABLE 9: roads
+================================================================================
+DESCRIPTION: Records information about all road segments in Nanjing
+
+CREATE TABLE "roads" (
+    gml_id TEXT PRIMARY KEY,              -- Road segment ID
+    Name TEXT,                             -- Road name
+    pyname TEXT,                           -- Pinyin name
+    kind_num INTEGER,                      -- Road type number
+    kind TEXT,                             -- Road type description
+    width INTEGER,                         -- Road width (meters)
+    length DOUBLE,                         -- ⚠️ DERIVED: Segment length
+    speedclass INTEGER,                    -- Speed limit class
+    Shape LINESTRING                       -- SPATIAL: Road centerline
+);
+
+COLUMN DETAILS:
+┌────────────┬────────────┬──────────┬──────────────────────────────────────┐
+│ Column     │ Type       │ Derived? │ Description                          │
+├────────────┼────────────┼──────────┼──────────────────────────────────────┤
+│ gml_id     │ TEXT       │ NO       │ Unique road segment ID (PK)          │
+│ Name       │ TEXT       │ NO       │ Road name (Chinese)                  │
+│ pyname     │ TEXT       │ NO       │ Pinyin romanization of road name     │
+│ kind_num   │ INTEGER    │ NO       │ Numeric road type code               │
+│ kind       │ TEXT       │ NO       │ Road type in text                    │
+│ width      │ INTEGER    │ NO       │ Road width in meters                 │
+│ length     │ DOUBLE     │ YES ✓    │ Segment length in meters             │
+│ speedclass │ INTEGER    │ NO       │ Speed limit classification           │
+│ Shape      │ LINESTRING │ NO       │ SPATIAL: Road centerline geometry    │
+└────────────┴────────────┴──────────┴──────────────────────────────────────┘
+
+DERIVED COLUMN COMPUTATION:
+- length: GLength(Shape, 1)
+
+IMPORTANT NOTES:
+- gml_id: Unique identifier for each road segment
+- Name: Road name; different segments may have the same name
+  Example: "广州路" may consist of multiple segments
+- Road names typically end with: 路 (road), 街 (street), 大道 (avenue)
+
+EXAMPLES:
+- "建康路" (Jiankang Road)
+- "广州路" (Guangzhou Road)
+- "秦淮路" (Qinhuai Road)
+- "将军大道" (Jiangjun Avenue)
+- "东风路" (Dongfeng Road)
+
+================================================================================
+TABLE 10: subways
+================================================================================
+DESCRIPTION: Records information about all subway lines in Nanjing
+
+CREATE TABLE "subways" (
+    Line TEXT PRIMARY KEY,                 -- Line name (e.g., "line4", "S7")
+    Shape LINESTRING                       -- SPATIAL: Subway route
+);
+
+COLUMN DETAILS:
+┌────────┬────────────┬──────────────────────────────────────────────┐
+│ Column │ Type       │ Description                                  │
+├────────┼────────────┼──────────────────────────────────────────────┤
+│ Line   │ TEXT       │ Subway line name/number (Primary Key)        │
+│ Shape  │ LINESTRING │ SPATIAL: Complete subway line route          │
+└────────┴────────────┴──────────────────────────────────────────────┘
+
+NANJING METRO LINES:
+- "line1" - Metro Line 1
+- "line2" - Metro Line 2
+- "line3" - Metro Line 3
+- "line4" - Metro Line 4
+- "line10二期" - Metro Line 10 Phase 2
+- "S7" - S7 Line (suburban line)
+
+NAMING CONVENTION:
+- Regular metro lines: "line1", "line2", etc.
+- Suburban/express lines: "S" prefix (e.g., "S7")
+- Extensions: "二期" (Phase 2)
+
+================================================================================
+TABLE 11: subwaystations
+================================================================================
+DESCRIPTION: Records information about all subway stations in Nanjing
+
+CREATE TABLE "subwaystations" (
+    station TEXT,                          -- Station name
+    Line TEXT,                             -- Subway line
+    address TEXT,                          -- Station address
+    adcode TEXT,                           -- ⚠️ DERIVED: District admin code
+    Location POINT,                        -- SPATIAL: Station coordinates
+    PRIMARY KEY (station, Line),
+    FOREIGN KEY (adcode) REFERENCES districts(administrative_division_code),
+    FOREIGN KEY (Line) REFERENCES subways(Line)
+);
+
+COLUMN DETAILS:
+┌─────────┬───────┬──────────┬──────────────────────────────────────────────┐
+│ Column  │ Type  │ Derived? │ Description                                  │
+├─────────┼───────┼──────────┼──────────────────────────────────────────────┤
+│ station │ TEXT  │ NO       │ Station name (part of composite PK)          │
+│ Line    │ TEXT  │ NO       │ Subway line name (part of composite PK, FK)  │
+│ address │ TEXT  │ NO       │ Street address of station                    │
+│ adcode  │ TEXT  │ YES ✓    │ Administrative division code of district     │
+│ Location│ POINT │ NO       │ SPATIAL: GPS coordinates of station          │
+└─────────┴───────┴──────────┴──────────────────────────────────────────────┘
+
+DERIVED COLUMN COMPUTATION:
+- adcode: SELECT d.administrative_division_code 
+          FROM districts d 
+          WHERE Within(station.Location, d.Shape)
+
+COMPOSITE PRIMARY KEY:
+- (station, Line) together form the primary key
+- Same station name can appear on multiple lines (transfer stations)
+
+EXAMPLES:
+- "大行宫" (Daxinggong) - major transfer station
+- "上海路" (Shanghai Road)
+
+NOTE:
+- In dataset2, the adcode column and its foreign key constraint are removed
+
+================================================================================
+COMMON SPATIAL QUERIES FOR TRAFFIC DATABASE
+================================================================================
+
+1. FIND BUS STOPS NEAR A LOCATION:
+   SELECT name, Distance(Location, 'POINT(118.78 32.06)', 1) AS dist
+   FROM busstops
+   WHERE Distance(Location, 'POINT(118.78 32.06)', 1) < 500
+   ORDER BY dist;
+
+2. FIND LONGEST BUS ROUTE:
+   SELECT name, distance
+   FROM buslines
+   ORDER BY distance DESC
+   LIMIT 1;
+   -- Or in dataset2: ORDER BY GLength(Shape, 1) DESC
+
+3. COUNT SUBWAY STATIONS PER DISTRICT:
+   SELECT d.name, COUNT(s.station)
+   FROM districts d
+   INNER JOIN subwaystations s ON Within(s.Location, d.Shape) = 1
+   GROUP BY d.name;
+
+4. FIND HOTELS NEAR A ROAD:
+   SELECT h.NAME, Distance(r.Shape, h.Location, 1) AS distance
+   FROM roads r, hotels h
+   WHERE r.Name = '广州路'
+   AND Distance(r.Shape, h.Location, 1) < 1000
+   ORDER BY distance;
+
+5. FIND GREEN SPACES INTERSECTED BY A RIVER:
+   SELECT g.NAME
+   FROM greenspaces g, rivers r
+   WHERE r.Name = '长江'
+   AND Intersects(g.Shape, r.Shape) = 1;
+
+6. CALCULATE TOTAL ROAD LENGTH BY TYPE:
+   SELECT kind, SUM(length) AS total_length
+   FROM roads
+   GROUP BY kind
+   ORDER BY total_length DESC;
+
+7. FIND NEAREST SUBWAY STATION TO A HOTEL:
+   SELECT s.station, s.Line, Distance(s.Location, h.Location, 1) AS dist
+   FROM subwaystations s, hotels h
+   WHERE h.NAME = '金龙大酒店'
+   ORDER BY dist
+   LIMIT 1;
+
+================================================================================
+SUMMARY: DERIVED COLUMNS IN TRAFFIC DATABASE
+================================================================================
+
+Table            | Derived Column  | Spatial Function      | Description
+-----------------|-----------------|-----------------------|---------------------------
+buslines         | distance        | GLength(Shape, 1)     | Bus route total length
+greenspaces      | Shape_Area      | Area(Shape, 1)        | Green space area
+roads            | length          | GLength(Shape, 1)     | Road segment length
+subwaystations   | adcode          | Within(Location, ...) | District code via spatial join
+
+================================================================================
+DATA CHARACTERISTICS
+================================================================================
+
+1. GEOGRAPHIC SCOPE:
+   - All data is confined to Nanjing city boundaries
+   - Coordinates use local projection system
+   - Detailed street-level granularity
+
+2. TRANSPORTATION MODES:
+   - Bus network: Complete routes and stops
+   - Subway network: All lines and stations
+   - Road network: Comprehensive street map
+   - Railway: Regional rail connections
+
+3. URBAN FACILITIES:
+   - Government agencies
+   - Hotels and accommodations
+   - Parks and green spaces
+   - Water bodies
+
+4. TYPICAL USE CASES:
+   - Transportation accessibility analysis
+   - Urban planning queries
+   - Proximity-based searches
+   - Route optimization
+   - Service coverage analysis
+
+================================================================================
+END OF TRAFFIC DATABASE METADATA
+================================================================================

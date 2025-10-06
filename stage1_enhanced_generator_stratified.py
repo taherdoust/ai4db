@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-stage1_enhanced_generator.py
+stage1_enhanced_generator.py - WITH STRATIFIED SAMPLING
 Enhanced Stage 1: Rule-Based Generation with Comprehensive Metadata
 Supports full pipeline with SDV Stage 2 and NL Augmentation Stage 3
 """
@@ -11,6 +11,7 @@ import re
 from typing import Dict, List, Optional
 from dataclasses import dataclass, asdict
 from datetime import datetime
+from collections import defaultdict
 from cim_wizard_sql_generator import (
     generate_comprehensive_cim_dataset,
     CIM_SCHEMAS,
@@ -499,11 +500,116 @@ def create_comprehensive_sample(
     return comprehensive_sample
 
 
+# ============================================================================
+# STRATIFIED SAMPLING FOR EVALUATION SET
+# ============================================================================
+
+def stratified_evaluation_sampling(
+    enhanced_samples: List[Dict],
+    evaluation_sample_size: int = 100,
+    random_seed: int = 42
+) -> List[int]:
+    """
+    Perform stratified sampling to ensure evaluation set is representative
+    
+    Stratification Dimensions:
+    1. SQL Type (11 types)
+    2. Difficulty Level (EASY, MEDIUM, HARD, EXPERT)
+    3. Usage Frequency (CRITICAL, VERY_HIGH, HIGH, MEDIUM, LOW)
+    4. Complexity Level (A, B, C)
+    
+    Args:
+        enhanced_samples: All generated samples with metadata
+        evaluation_sample_size: Target number of evaluation samples
+        random_seed: Random seed for reproducibility
+    
+    Returns:
+        List of indices to use for evaluation set
+    """
+    
+    random.seed(random_seed)
+    
+    print(f"\n[STRATIFIED SAMPLING] Creating representative evaluation set")
+    print(f"Target size: {evaluation_sample_size} samples")
+    
+    # Group samples by stratification key
+    strata = defaultdict(list)
+    
+    for idx, sample in enumerate(enhanced_samples):
+        # Create stratification key: (sql_type, difficulty, usage_freq, complexity_level)
+        key = (
+            sample['sql_type'],
+            sample['difficulty']['overall_difficulty'],
+            sample['usage_frequency'],
+            sample['complexity_level']
+        )
+        strata[key].append(idx)
+    
+    print(f"  Found {len(strata)} unique strata combinations")
+    
+    # Calculate proportional allocation
+    total_samples = len(enhanced_samples)
+    selected_indices = []
+    
+    # First pass: Allocate proportionally
+    allocation = {}
+    for stratum_key, stratum_indices in strata.items():
+        proportion = len(stratum_indices) / total_samples
+        allocated_count = max(1, int(proportion * evaluation_sample_size))  # At least 1 sample per stratum
+        allocation[stratum_key] = allocated_count
+    
+    # Adjust if over-allocated
+    total_allocated = sum(allocation.values())
+    if total_allocated > evaluation_sample_size:
+        # Reduce largest strata first
+        sorted_strata = sorted(allocation.items(), key=lambda x: x[1], reverse=True)
+        excess = total_allocated - evaluation_sample_size
+        for stratum_key, count in sorted_strata:
+            if excess == 0:
+                break
+            reduction = min(count - 1, excess)  # Keep at least 1
+            allocation[stratum_key] -= reduction
+            excess -= reduction
+    
+    # Under-allocated: add to largest strata
+    total_allocated = sum(allocation.values())
+    if total_allocated < evaluation_sample_size:
+        sorted_strata = sorted(allocation.items(), key=lambda x: len(strata[x[0]]), reverse=True)
+        deficit = evaluation_sample_size - total_allocated
+        for stratum_key, count in sorted_strata:
+            if deficit == 0:
+                break
+            available = len(strata[stratum_key]) - count
+            addition = min(available, deficit)
+            allocation[stratum_key] += addition
+            deficit -= addition
+    
+    # Sample from each stratum
+    print(f"\n  Stratification Summary:")
+    print(f"  {'Stratum (SQL_Type, Difficulty, Freq, Level)':<50} {'Total':<8} {'Selected':<10}")
+    print(f"  {'-'*70}")
+    
+    for stratum_key, stratum_indices in sorted(strata.items()):
+        allocated_count = allocation[stratum_key]
+        # Randomly sample from this stratum
+        sampled = random.sample(stratum_indices, min(allocated_count, len(stratum_indices)))
+        selected_indices.extend(sampled)
+        
+        sql_type, difficulty, freq, complexity = stratum_key
+        print(f"  {sql_type:<20} {difficulty:<8} {freq:<12} {complexity:<3} {len(stratum_indices):<8} {len(sampled):<10}")
+    
+    print(f"  {'-'*70}")
+    print(f"  {'TOTAL':<53} {total_samples:<8} {len(selected_indices):<10}")
+    
+    return selected_indices
+
+
 def generate_stage1_enhanced_dataset(
     num_variations: int = 200,
     output_file: str = "training_datasets/stage1_enhanced_dataset.jsonl",
     evaluation_sample_size: int = 100,
-    random_seed: int = 42
+    random_seed: int = 42,
+    use_stratified_sampling: bool = True
 ):
     """
     Generate Stage 1 enhanced dataset with comprehensive metadata
@@ -513,6 +619,7 @@ def generate_stage1_enhanced_dataset(
         output_file: Output JSONL file path
         evaluation_sample_size: Number of samples reserved for evaluation (with results)
         random_seed: Random seed for reproducibility
+        use_stratified_sampling: Use stratified sampling (recommended) vs random sampling
     
     Returns:
         Tuple of (enhanced_samples, statistics)
@@ -528,6 +635,7 @@ def generate_stage1_enhanced_dataset(
     print(f"  - Variations per template: {num_variations}")
     print(f"  - Evaluation samples: {evaluation_sample_size}")
     print(f"  - Random seed: {random_seed}")
+    print(f"  - Sampling method: {'STRATIFIED' if use_stratified_sampling else 'RANDOM'}")
     print(f"  - Output file: {output_file}")
     
     # Generate base dataset using existing generators
@@ -535,43 +643,55 @@ def generate_stage1_enhanced_dataset(
     dataset = generate_comprehensive_cim_dataset(base_variations=num_variations)
     print(f"      ✓ Generated {len(dataset)} base samples")
     
-    # Select random samples for evaluation
-    print(f"\n[2/5] Selecting evaluation samples...")
-    total_samples = len(dataset)
-    eval_size = min(evaluation_sample_size, total_samples)
-    eval_indices = set(random.sample(range(total_samples), eval_size))
-    print(f"      ✓ Selected {eval_size} samples for evaluation")
-    
-    # Create enhanced samples with comprehensive metadata
-    print(f"\n[3/5] Creating enhanced samples with comprehensive metadata...")
+    # Create enhanced samples with comprehensive metadata FIRST
+    print(f"\n[2/5] Creating enhanced samples with comprehensive metadata...")
     enhanced_samples = []
     
     for i, pair in enumerate(dataset):
         # Generate realistic parameter values
         values = generate_realistic_values()
         
-        # Determine if this is an evaluation sample
-        include_results = (i in eval_indices)
-        
         # Create unique sample ID
         sample_id = f"cim_stage1_{i:06d}"
         
-        # Create comprehensive sample
+        # Create comprehensive sample (WITHOUT evaluation flag yet)
         enhanced_sample = create_comprehensive_sample(
             sample_id=sample_id,
             sql_pair=pair,
             values=values,
             database_id=1,
-            include_results=include_results
+            include_results=False  # Will be set later
         )
         
         enhanced_samples.append(enhanced_sample)
         
         # Progress indicator
         if (i + 1) % 500 == 0:
-            print(f"      Progress: {i + 1}/{total_samples} samples processed...")
+            print(f"      Progress: {i + 1}/{len(dataset)} samples processed...")
     
     print(f"      ✓ Created {len(enhanced_samples)} enhanced samples")
+    
+    # Select evaluation samples using stratified or random sampling
+    print(f"\n[3/5] Selecting evaluation samples...")
+    total_samples = len(enhanced_samples)
+    eval_size = min(evaluation_sample_size, total_samples)
+    
+    if use_stratified_sampling:
+        eval_indices = set(stratified_evaluation_sampling(
+            enhanced_samples, 
+            eval_size, 
+            random_seed
+        ))
+    else:
+        print(f"  Using RANDOM sampling (not recommended)")
+        eval_indices = set(random.sample(range(total_samples), eval_size))
+    
+    print(f"      ✓ Selected {len(eval_indices)} samples for evaluation")
+    
+    # Update evaluation flags
+    for idx in eval_indices:
+        enhanced_samples[idx]['has_results'] = True
+        enhanced_samples[idx]['results'] = None  # To be filled with actual results
     
     # Save main dataset
     print(f"\n[4/5] Saving datasets...")
@@ -728,17 +848,19 @@ if __name__ == "__main__":
     # Parse command line arguments
     num_variations = int(sys.argv[1]) if len(sys.argv) > 1 else 200
     eval_size = int(sys.argv[2]) if len(sys.argv) > 2 else 100
+    use_stratified = sys.argv[3].lower() != 'false' if len(sys.argv) > 3 else True
     
     # Generate enhanced Stage 1 dataset
     samples, stats = generate_stage1_enhanced_dataset(
         num_variations=num_variations,
         output_file="training_datasets/stage1_enhanced_dataset.jsonl",
         evaluation_sample_size=eval_size,
-        random_seed=42
+        random_seed=42,
+        use_stratified_sampling=use_stratified
     )
     
-    print(f"\n Stage 1 Enhanced Dataset Successfully Created!")
+    print(f"\n🎉 Stage 1 Enhanced Dataset Successfully Created!")
     print(f"   Total samples: {len(samples):,}")
     print(f"   Output: training_datasets/stage1_enhanced_dataset.jsonl")
-    print(f"\n Next step: Run Stage 2 (SDV Synthetic Generation)")
+    print(f"\n▶️  Next step: Run Stage 2 (SDV Synthetic Generation)")
 

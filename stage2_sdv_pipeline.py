@@ -20,7 +20,7 @@ try:
     from sdv.metadata import SingleTableMetadata
     SDV_AVAILABLE = True
 except ImportError:
-    print("⚠️  SDV not installed. Run: pip install sdv==1.9.0")
+    print("  SDV not installed. Run: pip install sdv==1.9.0")
     SDV_AVAILABLE = False
 
 # SQL parsing
@@ -28,7 +28,7 @@ try:
     import sqlparse
     SQLPARSE_AVAILABLE = True
 except ImportError:
-    print("⚠️  sqlparse not installed. Run: pip install sqlparse==0.4.4")
+    print("  sqlparse not installed. Run: pip install sqlparse==0.4.4")
     SQLPARSE_AVAILABLE = False
 
 from cim_wizard_sql_generator import CIM_SCHEMAS, generate_realistic_values
@@ -311,7 +311,7 @@ class CTGANTrainer:
         end_time = datetime.now()
         duration = (end_time - start_time).total_seconds() / 60
         
-        print(f"\n✅ Training complete!")
+        print(f"\n Training complete!")
         print(f"   Duration: {duration:.1f} minutes")
         
     def generate(self, num_samples: int = 50000) -> pd.DataFrame:
@@ -324,7 +324,7 @@ class CTGANTrainer:
         
         synthetic_df = self.synthesizer.sample(num_rows=num_samples)
         
-        print(f"✅ Generated {len(synthetic_df)} synthetic structures")
+        print(f" Generated {len(synthetic_df)} synthetic structures")
         
         return synthetic_df
     
@@ -332,7 +332,7 @@ class CTGANTrainer:
         """Save trained model"""
         if self.synthesizer:
             self.synthesizer.save(filepath)
-            print(f"✅ Model saved to {filepath}")
+            print(f" Model saved to {filepath}")
     
     def load(self, filepath: str):
         """Load trained model"""
@@ -342,7 +342,7 @@ class CTGANTrainer:
             self.synthesizer = CTGANSynthesizer.load(filepath)
         else:
             self.synthesizer = GaussianCopulaSynthesizer.load(filepath)
-        print(f"✅ Model loaded from {filepath}")
+        print(f" Model loaded from {filepath}")
 
 
 # ============================================================================
@@ -655,7 +655,7 @@ def run_stage2_pipeline(
     
     # Check dependencies
     if not SDV_AVAILABLE:
-        print("\n❌ Error: SDV not installed!")
+        print("\n Error: SDV not installed!")
         print("   Run: pip install sdv==1.9.0")
         return None
     
@@ -796,7 +796,7 @@ def run_stage2_pipeline(
     with open(stats_file, 'w', encoding='utf-8') as f:
         json.dump(stats, f, indent=2)
     
-    print(f"\n✅ Stage 2 Complete!")
+    print(f"\n Stage 2 Complete!")
     print(f"   Output: {output_file}")
     print(f"   Statistics: {stats_file}")
     print(f"   Model: {model_file}")

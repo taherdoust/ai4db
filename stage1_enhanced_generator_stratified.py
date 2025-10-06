@@ -801,43 +801,43 @@ def print_summary_statistics(stats: Dict):
     print("="*80)
     
     info = stats['dataset_info']
-    print(f"\n📊 Dataset Overview:")
+    print(f"Dataset Overview:")
     print(f"   Total samples: {info['total_samples']:,}")
     print(f"   Training samples: {info['training_samples']:,}")
     print(f"   Evaluation samples: {info['evaluation_samples']:,}")
     
-    print(f"\n🔧 SQL Type Distribution (Top 5):")
+    print(f"SQL Type Distribution (Top 5):")
     for i, (sql_type, count) in enumerate(list(stats['sql_types'].items())[:5], 1):
         percentage = (count / info['total_samples']) * 100
         print(f"   {i}. {sql_type}: {count:,} ({percentage:.1f}%)")
     
-    print(f"\n💬 Question Tone Distribution (Top 5):")
+    print(f"Question Tone Distribution (Top 5):")
     for i, (tone, count) in enumerate(list(stats['question_tones'].items())[:5], 1):
         percentage = (count / info['total_samples']) * 100
         print(f"   {i}. {tone}: {count:,} ({percentage:.1f}%)")
     
-    print(f"\n⚡ Difficulty Distribution:")
+    print(f"Difficulty Distribution:")
     for difficulty in ['EASY', 'MEDIUM', 'HARD', 'EXPERT']:
         count = stats['difficulty_levels'].get(difficulty, 0)
         percentage = (count / info['total_samples']) * 100 if count > 0 else 0
         print(f"   {difficulty}: {count:,} ({percentage:.1f}%)")
     
-    print(f"\n📈 Usage Frequency Distribution:")
+    print(f"Usage Frequency Distribution:")
     for freq in ['CRITICAL', 'VERY_HIGH', 'HIGH', 'MEDIUM', 'LOW']:
         count = stats['usage_frequency'].get(freq, 0)
         percentage = (count / info['total_samples']) * 100 if count > 0 else 0
         print(f"   {freq}: {count:,} ({percentage:.1f}%)")
     
-    print(f"\n🌍 Spatial Functions (Top 10):")
+    print(f"Spatial Functions (Top 10):")
     for i, (func, count) in enumerate(list(stats['spatial_functions'].items())[:10], 1):
         print(f"   {i}. {func}: {count:,}")
     
-    print(f"\n🗄️  Schema Complexity:")
+    print(f"Schema Complexity:")
     for complexity, count in stats['schema_complexity'].items():
         percentage = (count / info['total_samples']) * 100
         print(f"   {complexity}: {count:,} ({percentage:.1f}%)")
     
-    print(f"\n✅ Dataset Generation Complete!")
+    print(f"Dataset Generation Complete!")
     print(f"   Ready for Stage 2 (SDV Synthetic Generation)")
     print("="*80)
 
@@ -859,8 +859,8 @@ if __name__ == "__main__":
         use_stratified_sampling=use_stratified
     )
     
-    print(f"\n🎉 Stage 1 Enhanced Dataset Successfully Created!")
+    print(f"\n Stage 1 Enhanced Dataset Successfully Created!")
     print(f"   Total samples: {len(samples):,}")
     print(f"   Output: training_datasets/stage1_enhanced_dataset.jsonl")
-    print(f"\n▶️  Next step: Run Stage 2 (SDV Synthetic Generation)")
+    print(f"\n  Next step: Run Stage 2 (SDV Synthetic Generation)")
 

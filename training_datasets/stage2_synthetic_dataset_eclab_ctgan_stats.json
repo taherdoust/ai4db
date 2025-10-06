@@ -1,0 +1,12 @@
+{
+  "total_generated": 75000,
+  "high_quality": 75000,
+  "final_dataset": 50000,
+  "average_quality_score": 0.8985032211640209,
+  "quality_threshold": 0.7,
+  "model_type": "CTGAN",
+  "machine": "eclab",
+  "training_mode": "CPU-only",
+  "epochs": 300,
+  "generation_date": "2025-10-06T15:40:52.660240"
+}

@@ -268,6 +268,47 @@ ls -lh training_datasets/stage3_augmented_dataset_eclab_openrouter_enhanced.json
 
 ---
 
+## 💾 Checkpoint & Resume Functionality
+
+The enhanced pipeline now includes **automatic checkpointing**:
+
+### **How It Works:**
+
+- ✅ Saves progress every 1,000 samples automatically
+- ✅ Creates two checkpoint files:
+  - `stage3_augmented_dataset_eclab_openrouter_enhanced_checkpoint.jsonl` (data)
+  - `stage3_augmented_dataset_eclab_openrouter_enhanced_checkpoint_meta.json` (metadata)
+- ✅ If interrupted (Ctrl+C, crash, network issue), simply **rerun the same command**
+- ✅ Automatically resumes from last checkpoint
+- ✅ Cleans up checkpoint files on successful completion
+
+### **Example:**
+
+```bash
+# Start pipeline
+python stage3_augmentation_pipeline_eclab_openrouter_enhanced.py --multiplier 10
+
+# [Process interrupted at sample 5,000/50,000]
+# Press Ctrl+C or power failure
+
+# Resume automatically by rerunning the same command
+python stage3_augmentation_pipeline_eclab_openrouter_enhanced.py --multiplier 10
+
+# Output:
+# [CHECKPOINT] Found existing checkpoint, resuming...
+# ✓ Loaded 40,000 samples from checkpoint
+# ✓ Resuming from sample 5,001 of 50,000
+```
+
+### **Benefits:**
+
+- 🔒 **No data loss**: All processed samples are saved
+- ⚡ **Fast recovery**: Resume in seconds, not hours
+- 💰 **Cost savings**: Don't pay for duplicate API calls
+- 🎯 **Peace of mind**: Can stop/start anytime
+
+---
+
 ## 🎉 Summary
 
 - **Secure**: API keys protected by `.gitignore`
@@ -275,6 +316,7 @@ ls -lh training_datasets/stage3_augmented_dataset_eclab_openrouter_enhanced.json
 - **Enhanced**: Generates both questions AND instructions
 - **Cost-effective**: One API call for both (50% savings)
 - **Easy**: Simple 3-step setup
+- **💾 NEW: Checkpoint/Resume**: Never lose progress if interrupted
 
 **You're now ready to generate high-quality training data securely!** 🚀
 

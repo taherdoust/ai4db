@@ -156,12 +156,21 @@ class OpenRouterClient:
             
             if response.status_code == 200:
                 result = response.json()
-                return result['choices'][0]['message']['content']
+                # Check if response has expected format
+                if 'choices' in result and len(result['choices']) > 0:
+                    return result['choices'][0]['message']['content']
+                else:
+                    print(f"⚠️  Unexpected API response format: {result}")
+                    return ""
             else:
                 print(f"⚠️  OpenRouter API error: {response.status_code}")
                 print(f"   Response: {response.text}")
                 return ""
         
+        except KeyError as e:
+            print(f"⚠️  API response missing key: {e}")
+            print(f"   Full response: {response.json() if response.status_code == 200 else response.text}")
+            return ""
         except Exception as e:
             print(f"⚠️  Generation error: {e}")
             return ""
@@ -630,11 +639,14 @@ def run_stage3_pipeline_eclab_openrouter_enhanced(
     output_file: str = "training_datasets/stage3_augmented_dataset_eclab_openrouter_enhanced.jsonl",
     target_multiplier: int = 8,
     openrouter_api_key: Optional[str] = None,
-    openrouter_model: str = "openai/gpt-4-turbo-preview"
+    openrouter_model: str = "openai/gpt-4-turbo-preview",
+    checkpoint_interval: int = 1000,
+    resume_from_checkpoint: bool = True
 ):
     """
     Execute Stage 3 augmentation pipeline with OpenRouter on eclab
     ENHANCED: Generates BOTH questions AND instructions
+    WITH CHECKPOINTS: Saves progress periodically and can resume if interrupted
     
     Args:
         stage2_file: Path to Stage 2 synthetic dataset
@@ -642,6 +654,8 @@ def run_stage3_pipeline_eclab_openrouter_enhanced(
         target_multiplier: Target variations per SQL (8x default for eclab)
         openrouter_api_key: OpenRouter API key (or set OPENROUTER_API_KEY env var)
         openrouter_model: OpenRouter model to use
+        checkpoint_interval: Save checkpoint every N samples (default: 1000)
+        resume_from_checkpoint: If True, resume from last checkpoint if exists
     
     Returns:
         List of augmented samples
@@ -659,6 +673,8 @@ def run_stage3_pipeline_eclab_openrouter_enhanced(
     print(f"  - Cost: $10-30 for OpenRouter API")
     print(f"  - Estimated time: 2-3 hours")
     print(f"  - 🆕 ENHANCED: Generates instructions alongside questions")
+    print(f"  - 💾 CHECKPOINTING: Saves progress every {checkpoint_interval:,} samples")
+    print(f"  - 🔄 RESUME: Can continue from last checkpoint if interrupted")
     
     # Initialize augmenters
     print(f"\n[1/5] Initializing augmentation strategies...")
@@ -675,6 +691,10 @@ def run_stage3_pipeline_eclab_openrouter_enhanced(
     comp_aug = CompositionalAugmenter()
     print("  ✓ Compositional augmenter ready")
     
+    # Checkpoint file paths
+    checkpoint_file = output_file.replace('.jsonl', '_checkpoint.jsonl')
+    checkpoint_meta_file = output_file.replace('.jsonl', '_checkpoint_meta.json')
+    
     # Load Stage 2 data
     print(f"\n[2/5] Loading Stage 2 data from {stage2_file}...")
     stage2_samples = []
@@ -683,11 +703,37 @@ def run_stage3_pipeline_eclab_openrouter_enhanced(
             stage2_samples.append(json.loads(line))
     print(f"  ✓ Loaded {len(stage2_samples):,} Stage 2 samples")
     
-    # Augment each sample
-    print(f"\n[3/5] Generating augmented questions and instructions...")
+    # Check for existing checkpoint
+    start_idx = 0
     augmented_samples = []
     
+    if resume_from_checkpoint and os.path.exists(checkpoint_file) and os.path.exists(checkpoint_meta_file):
+        print(f"\n[CHECKPOINT] Found existing checkpoint, resuming...")
+        
+        # Load checkpoint metadata
+        with open(checkpoint_meta_file, 'r') as f:
+            checkpoint_meta = json.load(f)
+            start_idx = checkpoint_meta.get('last_processed_idx', 0) + 1
+            
+        # Load checkpoint data
+        with open(checkpoint_file, 'r', encoding='utf-8') as f:
+            for line in f:
+                augmented_samples.append(json.loads(line))
+        
+        print(f"  ✓ Loaded {len(augmented_samples):,} samples from checkpoint")
+        print(f"  ✓ Resuming from sample {start_idx:,} of {len(stage2_samples):,}")
+    else:
+        print(f"\n  ℹ️  No checkpoint found, starting from beginning")
+        print(f"  ℹ️  Checkpoints will be saved every {checkpoint_interval:,} samples to:")
+        print(f"     {checkpoint_file}")
+    
+    # Augment each sample
+    print(f"\n[3/5] Generating augmented questions and instructions...")
+    
     for i, sample in enumerate(stage2_samples):
+        # Skip already processed samples
+        if i < start_idx:
+            continue
         sql = sample['sql_postgis']
         metadata = sample
         
@@ -727,8 +773,28 @@ def run_stage3_pipeline_eclab_openrouter_enhanced(
             
             augmented_samples.append(aug_sample)
         
-        if (i + 1) % 1000 == 0:
+        # Save checkpoint periodically
+        if (i + 1) % checkpoint_interval == 0:
             print(f"  Progress: {i + 1:,}/{len(stage2_samples):,} samples processed...")
+            print(f"  💾 Saving checkpoint...")
+            
+            # Save augmented samples to checkpoint
+            with open(checkpoint_file, 'w', encoding='utf-8') as f:
+                for aug_sample in augmented_samples:
+                    f.write(json.dumps(aug_sample, ensure_ascii=False) + '\n')
+            
+            # Save checkpoint metadata
+            checkpoint_meta = {
+                'last_processed_idx': i,
+                'total_augmented_samples': len(augmented_samples),
+                'timestamp': datetime.now().isoformat(),
+                'stage2_file': stage2_file,
+                'target_multiplier': target_multiplier
+            }
+            with open(checkpoint_meta_file, 'w') as f:
+                json.dump(checkpoint_meta, f, indent=2)
+            
+            print(f"  ✓ Checkpoint saved ({len(augmented_samples):,} samples)")
     
     print(f"  ✓ Generated {len(augmented_samples):,} augmented samples")
     print(f"  ✓ Each sample has both question AND instruction")
@@ -764,6 +830,14 @@ def run_stage3_pipeline_eclab_openrouter_enhanced(
     with open(stats_file, 'w', encoding='utf-8') as f:
         json.dump(stats, f, indent=2)
     
+    # Clean up checkpoint files on successful completion
+    if os.path.exists(checkpoint_file):
+        os.remove(checkpoint_file)
+        print(f"\n🧹 Cleaned up checkpoint file")
+    if os.path.exists(checkpoint_meta_file):
+        os.remove(checkpoint_meta_file)
+        print(f"🧹 Cleaned up checkpoint metadata")
+    
     print(f"\n✅ Stage 3 Complete (eclab with OpenRouter - ENHANCED)!")
     print(f"   Output: {output_file}")
     print(f"   Total samples: {len(augmented_samples):,}")
@@ -771,6 +845,8 @@ def run_stage3_pipeline_eclab_openrouter_enhanced(
     print(f"   Unique instructions: {unique_instructions:,}")
     print(f"   Statistics: {stats_file}")
     print(f"   🎉 High-quality questions + instructions with GPT-4!")
+    print(f"\n💾 NOTE: Progress was checkpointed every {checkpoint_interval:,} samples")
+    print(f"   If interrupted, rerun this script to resume from last checkpoint")
     
     return augmented_samples, stats
 

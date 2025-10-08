@@ -29,6 +29,7 @@ import numpy as np
 import requests
 import time
 import os
+import logging
 
 # Load .env file support
 try:
@@ -37,7 +38,21 @@ try:
     DOTENV_AVAILABLE = True
 except ImportError:
     DOTENV_AVAILABLE = False
-    print("💡 Tip: Install python-dotenv for .env file support: pip install python-dotenv")
+    print("Tip: Install python-dotenv for .env file support: pip install python-dotenv")
+
+# Setup logging
+def setup_logging(log_file: str):
+    """Configure logging for both file and console output"""
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s [%(levelname)s] %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S',
+        handlers=[
+            logging.FileHandler(log_file, mode='a'),
+            logging.StreamHandler()
+        ]
+    )
+    return logging.getLogger(__name__)
 
 # NLP libraries
 try:
@@ -661,79 +676,111 @@ def run_stage3_pipeline_eclab_openrouter_enhanced(
         List of augmented samples
     """
     
-    print("="*80)
-    print("STAGE 3: NL QUESTION & INSTRUCTION AUGMENTATION - ECLAB (ENHANCED)")
-    print("="*80)
-    print(f"Machine: eclab (Intel i7-4790, 16GB RAM, CPU-only)")
-    print(f"Configuration:")
-    print(f"  - Target multiplier: {target_multiplier}x")
-    print(f"  - OpenRouter Model: {openrouter_model}")
-    print(f"  - Primary: OpenRouter API (generates questions + instructions)")
-    print(f"  - Secondary: Template-based (fast fallback)")
-    print(f"  - Cost: $10-30 for OpenRouter API")
-    print(f"  - Estimated time: 2-3 hours")
-    print(f"  - 🆕 ENHANCED: Generates instructions alongside questions")
-    print(f"  - 💾 CHECKPOINTING: Saves progress every {checkpoint_interval:,} samples")
-    print(f"  - 🔄 RESUME: Can continue from last checkpoint if interrupted")
+    # Setup logging
+    log_file = output_file.replace('.jsonl', '_verbose.log')
+    logger = setup_logging(log_file)
+    
+    pipeline_start_time = time.time()
+    
+    logger.info("="*80)
+    logger.info("STAGE 3: NL QUESTION & INSTRUCTION AUGMENTATION - ECLAB (ENHANCED)")
+    logger.info("="*80)
+    logger.info(f"Machine: eclab (Intel i7-4790, 16GB RAM, CPU-only)")
+    logger.info(f"Configuration:")
+    logger.info(f"  - Target multiplier: {target_multiplier}x")
+    logger.info(f"  - OpenRouter Model: {openrouter_model}")
+    logger.info(f"  - Primary: OpenRouter API (generates questions + instructions)")
+    logger.info(f"  - Secondary: Template-based (fast fallback)")
+    logger.info(f"  - Checkpoint interval: {checkpoint_interval:,} samples")
+    logger.info(f"  - Log file: {log_file}")
+    logger.info(f"  - Started at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     
     # Initialize augmenters
-    print(f"\n[1/5] Initializing augmentation strategies...")
+    logger.info("")
+    logger.info("[1/5] Initializing augmentation strategies...")
+    init_start = time.time()
     
     template_aug = TemplateAugmenter()
-    print("  ✓ Template augmenter ready")
+    logger.info("  Template augmenter ready")
     
     openrouter_aug = OpenRouterAugmenter(api_key=openrouter_api_key, model=openrouter_model)
     if openrouter_aug.available:
-        print(f"  ✓ OpenRouter augmenter ready ({openrouter_model})")
+        logger.info(f"  OpenRouter augmenter ready ({openrouter_model})")
     else:
-        print("  ⚠️  OpenRouter not available, using template-only mode")
+        logger.warning("  OpenRouter not available, using template-only mode")
     
     comp_aug = CompositionalAugmenter()
-    print("  ✓ Compositional augmenter ready")
+    logger.info("  Compositional augmenter ready")
+    logger.info(f"  Initialization completed in {time.time() - init_start:.2f} seconds")
     
     # Checkpoint file paths
     checkpoint_file = output_file.replace('.jsonl', '_checkpoint.jsonl')
     checkpoint_meta_file = output_file.replace('.jsonl', '_checkpoint_meta.json')
     
     # Load Stage 2 data
-    print(f"\n[2/5] Loading Stage 2 data from {stage2_file}...")
+    logger.info("")
+    logger.info(f"[2/5] Loading Stage 2 data from {stage2_file}...")
+    load_start = time.time()
     stage2_samples = []
     with open(stage2_file, 'r', encoding='utf-8') as f:
         for line in f:
             stage2_samples.append(json.loads(line))
-    print(f"  ✓ Loaded {len(stage2_samples):,} Stage 2 samples")
+    load_time = time.time() - load_start
+    logger.info(f"  Loaded {len(stage2_samples):,} Stage 2 samples")
+    logger.info(f"  Load time: {load_time:.2f} seconds")
     
     # Check for existing checkpoint
     start_idx = 0
     augmented_samples = []
     
     if resume_from_checkpoint and os.path.exists(checkpoint_file) and os.path.exists(checkpoint_meta_file):
-        print(f"\n[CHECKPOINT] Found existing checkpoint, resuming...")
+        logger.info("")
+        logger.info("[CHECKPOINT] Found existing checkpoint, resuming...")
+        checkpoint_load_start = time.time()
         
         # Load checkpoint metadata
         with open(checkpoint_meta_file, 'r') as f:
             checkpoint_meta = json.load(f)
             start_idx = checkpoint_meta.get('last_processed_idx', 0) + 1
+            prev_timestamp = checkpoint_meta.get('timestamp', 'unknown')
             
         # Load checkpoint data
         with open(checkpoint_file, 'r', encoding='utf-8') as f:
             for line in f:
                 augmented_samples.append(json.loads(line))
         
-        print(f"  ✓ Loaded {len(augmented_samples):,} samples from checkpoint")
-        print(f"  ✓ Resuming from sample {start_idx:,} of {len(stage2_samples):,}")
+        checkpoint_load_time = time.time() - checkpoint_load_start
+        logger.info(f"  Loaded {len(augmented_samples):,} samples from checkpoint")
+        logger.info(f"  Previous checkpoint saved at: {prev_timestamp}")
+        logger.info(f"  Resuming from Stage 2 sample {start_idx:,} of {len(stage2_samples):,}")
+        logger.info(f"  Progress: {start_idx}/{len(stage2_samples)} ({100*start_idx/len(stage2_samples):.1f}%)")
+        logger.info(f"  Checkpoint load time: {checkpoint_load_time:.2f} seconds")
     else:
-        print(f"\n  ℹ️  No checkpoint found, starting from beginning")
-        print(f"  ℹ️  Checkpoints will be saved every {checkpoint_interval:,} samples to:")
-        print(f"     {checkpoint_file}")
+        logger.info("")
+        logger.info("  No checkpoint found, starting from beginning")
+        logger.info(f"  Checkpoints will be saved every {checkpoint_interval:,} samples")
+        logger.info(f"  Checkpoint file: {checkpoint_file}")
     
     # Augment each sample
-    print(f"\n[3/5] Generating augmented questions and instructions...")
+    logger.info("")
+    logger.info("[3/5] Generating augmented questions and instructions...")
+    logger.info(f"  Total Stage 2 samples to process: {len(stage2_samples):,}")
+    logger.info(f"  Starting from sample: {start_idx:,}")
+    logger.info(f"  Samples remaining: {len(stage2_samples) - start_idx:,}")
+    
+    generation_start_time = time.time()
+    last_checkpoint_time = time.time()
+    batch_start_time = time.time()
+    api_call_count = 0
+    api_success_count = 0
+    api_fail_count = 0
     
     for i, sample in enumerate(stage2_samples):
         # Skip already processed samples
         if i < start_idx:
             continue
+        
+        sample_start_time = time.time()
         sql = sample['sql_postgis']
         metadata = sample
         
@@ -745,8 +792,15 @@ def run_stage3_pipeline_eclab_openrouter_enhanced(
         
         # 2. OpenRouter API (4x) - High quality (primary method)
         if openrouter_aug.available:
+            api_start = time.time()
             openrouter_pairs = openrouter_aug.generate_question_instruction_pairs(sql, metadata, num=4)
-            all_pairs.extend(openrouter_pairs)
+            api_time = time.time() - api_start
+            api_call_count += 1
+            if len(openrouter_pairs) > 0:
+                api_success_count += 1
+                all_pairs.extend(openrouter_pairs)
+            else:
+                api_fail_count += 1
             # Add small delay to respect rate limits
             time.sleep(0.1)
         
@@ -757,26 +811,52 @@ def run_stage3_pipeline_eclab_openrouter_enhanced(
             all_pairs.extend(comp_pairs)
         
         # Filter and deduplicate
+        pairs_before_filter = len(all_pairs)
         all_pairs = filter_quality(all_pairs, metadata)
         all_pairs = deduplicate_semantic(all_pairs, threshold=0.95)
+        pairs_after_filter = len(all_pairs)
         
         # Create augmented samples
         for var_idx, (question, instruction) in enumerate(all_pairs[:target_multiplier]):
             aug_sample = sample.copy()
             aug_sample['id'] = f"{sample['id']}_aug{var_idx:02d}"
             aug_sample['question'] = question
-            aug_sample['instruction'] = instruction  # 🆕 ENHANCED: Now has real instruction
+            aug_sample['instruction'] = instruction
             aug_sample['question_tone'] = classify_tone(question)
             aug_sample['augmentation_stage'] = "stage3_eclab_openrouter_enhanced"
             aug_sample['variation_index'] = var_idx
-            aug_sample['has_synthetic_instruction'] = True  # 🆕 Flag for tracking
+            aug_sample['has_synthetic_instruction'] = True
             
             augmented_samples.append(aug_sample)
         
+        sample_time = time.time() - sample_start_time
+        
+        # Log every 100 samples
+        if (i + 1) % 100 == 0:
+            elapsed = time.time() - generation_start_time
+            processed = i + 1 - start_idx
+            avg_time_per_sample = elapsed / processed if processed > 0 else 0
+            remaining = len(stage2_samples) - (i + 1)
+            eta_seconds = remaining * avg_time_per_sample
+            eta_hours = eta_seconds / 3600
+            
+            logger.info(f"  Sample {i+1:,}/{len(stage2_samples):,} | "
+                       f"Generated: {len(augmented_samples):,} | "
+                       f"Avg time: {avg_time_per_sample:.2f}s/sample | "
+                       f"ETA: {eta_hours:.2f}h")
+        
         # Save checkpoint periodically
         if (i + 1) % checkpoint_interval == 0:
-            print(f"  Progress: {i + 1:,}/{len(stage2_samples):,} samples processed...")
-            print(f"  💾 Saving checkpoint...")
+            checkpoint_save_start = time.time()
+            time_since_last_checkpoint = time.time() - last_checkpoint_time
+            
+            logger.info("")
+            logger.info(f"[CHECKPOINT] Milestone reached: {i + 1:,}/{len(stage2_samples):,} Stage 2 samples processed")
+            logger.info(f"  Progress: {100*(i+1)/len(stage2_samples):.1f}% complete")
+            logger.info(f"  Augmented samples generated: {len(augmented_samples):,}")
+            logger.info(f"  Time since last checkpoint: {time_since_last_checkpoint/60:.2f} minutes")
+            logger.info(f"  API calls: {api_call_count} (Success: {api_success_count}, Failed: {api_fail_count})")
+            logger.info(f"  Saving checkpoint...")
             
             # Save augmented samples to checkpoint
             with open(checkpoint_file, 'w', encoding='utf-8') as f:
@@ -789,40 +869,77 @@ def run_stage3_pipeline_eclab_openrouter_enhanced(
                 'total_augmented_samples': len(augmented_samples),
                 'timestamp': datetime.now().isoformat(),
                 'stage2_file': stage2_file,
-                'target_multiplier': target_multiplier
+                'target_multiplier': target_multiplier,
+                'api_call_count': api_call_count,
+                'api_success_count': api_success_count,
+                'api_fail_count': api_fail_count,
+                'elapsed_time_seconds': time.time() - generation_start_time
             }
             with open(checkpoint_meta_file, 'w') as f:
                 json.dump(checkpoint_meta, f, indent=2)
             
-            print(f"  ✓ Checkpoint saved ({len(augmented_samples):,} samples)")
+            checkpoint_save_time = time.time() - checkpoint_save_start
+            logger.info(f"  Checkpoint saved successfully")
+            logger.info(f"  Checkpoint save time: {checkpoint_save_time:.2f} seconds")
+            logger.info(f"  File: {checkpoint_file}")
+            logger.info("")
+            
+            last_checkpoint_time = time.time()
+            # Reset API counters for next batch
+            api_call_count = 0
+            api_success_count = 0
+            api_fail_count = 0
     
-    print(f"  ✓ Generated {len(augmented_samples):,} augmented samples")
-    print(f"  ✓ Each sample has both question AND instruction")
+    generation_time = time.time() - generation_start_time
+    logger.info("")
+    logger.info(f"  Generation complete: {len(augmented_samples):,} augmented samples")
+    logger.info(f"  Total generation time: {generation_time/60:.2f} minutes ({generation_time/3600:.2f} hours)")
+    logger.info(f"  Average time per Stage 2 sample: {generation_time/len(stage2_samples):.2f} seconds")
     
     # Save dataset
-    print(f"\n[4/5] Saving augmented dataset to {output_file}...")
+    logger.info("")
+    logger.info(f"[4/5] Saving augmented dataset to {output_file}...")
+    save_start = time.time()
     with open(output_file, 'w', encoding='utf-8') as f:
         for sample in augmented_samples:
             f.write(json.dumps(sample, ensure_ascii=False) + '\n')
+    save_time = time.time() - save_start
+    logger.info(f"  Dataset saved successfully")
+    logger.info(f"  Save time: {save_time:.2f} seconds")
+    logger.info(f"  File size: {os.path.getsize(output_file) / (1024*1024):.2f} MB")
     
     # Statistics
-    print(f"\n[5/5] Generating statistics...")
+    logger.info("")
+    logger.info("[5/5] Generating statistics...")
     
     # Count unique instructions
     unique_instructions = len(set(s['instruction'] for s in augmented_samples))
+    unique_questions = len(set(s['question'] for s in augmented_samples))
+    
+    total_pipeline_time = time.time() - pipeline_start_time
     
     stats = {
         "total_samples": len(augmented_samples),
         "stage2_input": len(stage2_samples),
         "average_multiplier": len(augmented_samples) / len(stage2_samples) if stage2_samples else 0,
         "unique_instructions": unique_instructions,
+        "unique_questions": unique_questions,
         "generation_date": datetime.now().isoformat(),
         "machine": "eclab",
         "configuration": {
             "target_multiplier": target_multiplier,
             "use_openrouter": openrouter_aug.available,
             "openrouter_model": openrouter_model,
-            "generates_instructions": True
+            "generates_instructions": True,
+            "checkpoint_interval": checkpoint_interval
+        },
+        "timing": {
+            "total_pipeline_time_seconds": total_pipeline_time,
+            "total_pipeline_time_hours": total_pipeline_time / 3600,
+            "generation_time_seconds": generation_time,
+            "generation_time_hours": generation_time / 3600,
+            "avg_time_per_stage2_sample": generation_time / len(stage2_samples),
+            "avg_time_per_augmented_sample": generation_time / len(augmented_samples)
         }
     }
     
@@ -830,23 +947,35 @@ def run_stage3_pipeline_eclab_openrouter_enhanced(
     with open(stats_file, 'w', encoding='utf-8') as f:
         json.dump(stats, f, indent=2)
     
+    logger.info(f"  Statistics generated and saved to {stats_file}")
+    
     # Clean up checkpoint files on successful completion
+    logger.info("")
+    logger.info("[CLEANUP] Removing checkpoint files...")
     if os.path.exists(checkpoint_file):
         os.remove(checkpoint_file)
-        print(f"\n🧹 Cleaned up checkpoint file")
+        logger.info(f"  Removed checkpoint file: {checkpoint_file}")
     if os.path.exists(checkpoint_meta_file):
         os.remove(checkpoint_meta_file)
-        print(f"🧹 Cleaned up checkpoint metadata")
+        logger.info(f"  Removed checkpoint metadata: {checkpoint_meta_file}")
     
-    print(f"\n✅ Stage 3 Complete (eclab with OpenRouter - ENHANCED)!")
-    print(f"   Output: {output_file}")
-    print(f"   Total samples: {len(augmented_samples):,}")
-    print(f"   Average multiplier: {stats['average_multiplier']:.1f}x")
-    print(f"   Unique instructions: {unique_instructions:,}")
-    print(f"   Statistics: {stats_file}")
-    print(f"   🎉 High-quality questions + instructions with GPT-4!")
-    print(f"\n💾 NOTE: Progress was checkpointed every {checkpoint_interval:,} samples")
-    print(f"   If interrupted, rerun this script to resume from last checkpoint")
+    logger.info("")
+    logger.info("="*80)
+    logger.info("STAGE 3 COMPLETE - SUMMARY")
+    logger.info("="*80)
+    logger.info(f"  Output file: {output_file}")
+    logger.info(f"  Total augmented samples: {len(augmented_samples):,}")
+    logger.info(f"  Unique questions: {unique_questions:,}")
+    logger.info(f"  Unique instructions: {unique_instructions:,}")
+    logger.info(f"  Average multiplier: {stats['average_multiplier']:.2f}x")
+    logger.info(f"  Total pipeline time: {total_pipeline_time/60:.2f} minutes ({total_pipeline_time/3600:.2f} hours)")
+    logger.info(f"  Generation time: {generation_time/60:.2f} minutes ({generation_time/3600:.2f} hours)")
+    logger.info(f"  Statistics file: {stats_file}")
+    logger.info(f"  Log file: {log_file}")
+    logger.info("="*80)
+    logger.info(f"  NOTE: Progress was checkpointed every {checkpoint_interval:,} samples")
+    logger.info(f"  If interrupted, rerun this script to resume from last checkpoint")
+    logger.info("="*80)
     
     return augmented_samples, stats
 

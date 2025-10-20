@@ -28,6 +28,7 @@ A comprehensive, research-validated three-stage pipeline for generating high-qua
 
 ### **Recommended Configuration (Maximum Quality)**
 
+**Option 1: General Spatial SQL**
 ```bash
 # Setup environment (one-time)
 cd ~/Desktop/ai4db
@@ -44,12 +45,33 @@ python stage2_sdv_pipeline_eclab_ctgan.py 50000 300
 python stage3_augmentation_pipeline_eclab_openrouter_enhanced.py --multiplier 10
 ```
 
-**Results:**
+**Option 2: CIM Wizard Specific** ⭐ **NEW**
+```bash
+# Setup environment (one-time)
+cd ~/Desktop/coesi2/ai4db
+conda activate ai4db
+
+# Setup API key (one-time)
+cp .env.example .env
+nano .env  # Add: OPENROUTER_API_KEY=sk-or-v1-YOUR-KEY
+
+# Run CIM-specific pipeline
+python stage1_cim.py 200 100
+python stage2_sdv_pipeline_eclab_ctgan.py 50000 300
+python stage3_augmentation_pipeline_eclab_openrouter_enhanced.py --multiplier 10
+```
+
+**Results (CIM Wizard):**
 - **Time:** ~2-4 hours
 - **Cost:** $5-15 (OpenRouter API)
 - **Quality:** 85-95%
 - **Output:** ~400,000-500,000 training samples
-- **Features:** Questions + instructions, automatic checkpointing
+- **Features:** 
+  - Real database UUIDs and values
+  - PostGIS public schema compatibility
+  - Questions + instructions
+  - Automatic checkpointing
+  - Immediately executable queries
 
 ---
 
@@ -91,13 +113,34 @@ python stage3_augmentation_pipeline_eclab_openrouter_enhanced.py --multiplier 10
 | Component | Count | Source File |
 |-----------|-------|-------------|
 | **General Spatial Templates** | 24 | `rule_based_ssql_generator.py` |
-| **CIM Wizard Specific** | 28 | `cim_wizard_sql_generator.py` |
-| **TOTAL** | **52** | Combined |
+| **CIM Wizard Specific** | 25 | `stage1_cim.py` |
+| **TOTAL** | **49** | Combined |
 
-**Coverage Levels:**
-- Level A (Basic): 15 templates - Simple spatial operations
-- Level B (Intermediate): 14 templates - Multi-table joins, aggregations
-- Level C (Advanced): 23 templates - Cross-schema, clustering, raster-vector
+**CIM Wizard Coverage Levels:**
+- Level A (Basic): 9 templates - Simple spatial operations, single table queries
+- Level B (Intermediate): 9 templates - Multi-table joins, aggregations, proximity analysis
+- Level C (Advanced): 7 templates - Cross-schema, clustering, raster-vector integration
+
+**Key Features of CIM Templates:**
+- ✅ Real database UUIDs (4 project-scenario pairs, 50 building IDs)
+- ✅ PostGIS public schema prefix (`public.ST_*` functions)
+- ✅ Actual voltage levels from network_buses (0.4, 20, 132, 400 kV)
+- ✅ Real building types (residential, non-residential)
+- ✅ Validated join relationships based on actual schema
+
+### **Generator Comparison**
+
+| Feature | General (`stage1_enhanced_generator_stratified.py`) | CIM Wizard (`stage1_cim.py`) ⭐ |
+|---------|-----------------------------------------------------|--------------------------------|
+| **Templates** | 24 generic spatial SQL | 25 CIM-specific |
+| **Database Values** | Synthetic/example values | Real UUIDs from database |
+| **PostGIS Functions** | Standard `ST_*` | `public.ST_*` (schema-qualified) |
+| **Project IDs** | Example strings | 4 real UUID pairs |
+| **Building IDs** | Example UUIDs | 50 actual building UUIDs |
+| **Voltage Levels** | Generic (0.4, 10, 20, 132, 220, 400 kV) | Actual (0.4, 20, 132, 400 kV) |
+| **Building Types** | Generic types | Real (residential, non-residential) |
+| **Executability** | May require adaptation | Immediately executable |
+| **Best For** | General spatial databases | CIM Wizard database |
 
 ### **Scalability**
 
@@ -309,7 +352,33 @@ python stage3_augmentation_pipeline_ipazia.py --multiplier 10
 
 Stage 1 generates high-quality base samples using handcrafted templates with comprehensive metadata. Implements stratified sampling for representative evaluation sets.
 
-**Script:** `stage1_enhanced_generator_stratified.py`
+**Scripts:**
+- `stage1_enhanced_generator_stratified.py` - General spatial SQL templates (24 templates)
+- `stage1_cim.py` - CIM Wizard specific templates (25 templates) **⭐ NEW**
+
+### **CIM Wizard Specific Generator** (stage1_cim.py)
+
+The CIM-specific generator includes special features for the CIM Wizard database:
+
+**Real Database Integration:**
+- ✅ **4 Project-Scenario Pairs** from actual database
+  - `Sansalva_filter` / `baseline`
+  - `Sansalva_filter` / `sansalva3.5`
+  - `Sansalva_filter_3` / `sansalva3`
+  - `Sansalva_filter_4` / `sansalva4`
+- ✅ **50 Real Building UUIDs** queried from cim_wizard_building table
+- ✅ **Actual Voltage Levels**: 0.4, 20.0, 132.0, 400.0 kV (from network_buses)
+- ✅ **Real Building Types**: residential, non-residential (from building_properties)
+
+**PostGIS Public Schema:**
+- All spatial functions use `public.` prefix: `public.ST_Area()`, `public.ST_Distance()`, etc.
+- Ensures compatibility with CIM Wizard database where PostGIS is installed on public schema
+- 70 function calls updated across all templates
+
+**Template Categories:**
+1. **Complexity A (9 templates)** - Building selection, distance calculation, project boundaries
+2. **Complexity B (9 templates)** - Nearest neighbor queries, grid proximity, raster statistics
+3. **Complexity C (7 templates)** - Multi-schema integration, clustering, raster-vector operations
 
 ### **Key Features**
 
@@ -504,6 +573,7 @@ Each sample includes:
 
 ### **Usage**
 
+**General Spatial SQL Generator:**
 ```bash
 # Basic usage (200 variations per template)
 python stage1_enhanced_generator_stratified.py 200 100
@@ -514,22 +584,72 @@ python stage1_enhanced_generator_stratified.py 200 100
 
 # Custom configuration
 python stage1_enhanced_generator_stratified.py 500 200
+```
 
-# Disable stratified sampling (not recommended)
-python stage1_enhanced_generator_stratified.py 200 100 false
+**CIM Wizard Specific Generator:** ⭐
+```bash
+# Basic usage (200 variations per template)
+python stage1_cim.py 200 100
+
+# Arguments:
+# - 200: Number of parameter variations per template
+# - 100: Size of evaluation subset
+
+# Custom configuration (more variations)
+python stage1_cim.py 500 200
+
+# Quick test (fewer variations)
+python stage1_cim.py 50 20
+```
+
+**Key Differences:**
+- `stage1_cim.py` uses **real database values** (project IDs, building IDs, voltage levels)
+- All queries include **`public.` prefix** for PostGIS functions
+- Queries are **immediately executable** on CIM Wizard database
+- 25 CIM-specific templates vs 24 general templates
+
+**Example CIM Query with Public Prefix:**
+```sql
+SELECT b1.building_id,
+       bp1.type,
+       bp1.height,
+       public.ST_Distance(
+         public.ST_Centroid(b1.building_geometry), 
+         public.ST_Centroid(b2.building_geometry)
+       ) as distance_m
+FROM cim_vector.cim_wizard_building b1
+JOIN cim_vector.cim_wizard_building_properties bp1 
+  ON b1.building_id = bp1.building_id AND b1.lod = bp1.lod
+CROSS JOIN cim_vector.cim_wizard_building b2
+WHERE bp1.project_id = '4be7d1ff-e8bf-4374-a13e-67e7b0d52eb1'
+  AND bp1.scenario_id = '4be7d1ff-e8bf-4374-a13e-67e7b0d52eb1'
+  AND b2.building_id = '0033de25-d7d1-48d5-98c3-bc02973a13c0'
+  AND b1.building_id != b2.building_id
+  AND public.ST_Distance(
+    public.ST_Centroid(b1.building_geometry), 
+    public.ST_Centroid(b2.building_geometry)
+  ) < 1000
+ORDER BY distance_m ASC
+LIMIT 10;
 ```
 
 ### **Expected Output**
 
-**Files Generated:**
+**Files Generated (General):**
 - `training_datasets/stage1_enhanced_dataset.jsonl` - Main dataset
 - `training_datasets/stage1_enhanced_dataset_eval.jsonl` - Evaluation subset
 - `training_datasets/stage1_enhanced_dataset_stats.json` - Statistics
 
+**Files Generated (CIM Wizard):** ⭐
+- `training_datasets/stage1_cim_dataset.jsonl` - Main dataset
+- `training_datasets/stage1_cim_dataset_eval.jsonl` - Evaluation subset
+- `training_datasets/stage1_cim_dataset_stats.json` - Statistics
+
 **Quantities:**
-- 200 variations: ~10,400 samples
+- **General**: 200 variations × 24 templates = ~4,800 samples
+- **CIM Wizard**: 200 variations × 25 templates = ~5,000 samples
 - Evaluation subset: 100 samples (stratified)
-- Training samples: ~10,300 samples
+- Training samples: ~4,900 samples (CIM)
 
 **Statistics:**
 ```json
@@ -1680,7 +1800,8 @@ If you use this spatial SQL generator in your research, please cite:
 
 ```
 ai4db/
-├── stage1_enhanced_generator_stratified.py         # Stage 1 with stratified sampling
+├── stage1_enhanced_generator_stratified.py         # Stage 1 general spatial SQL
+├── stage1_cim.py                                   # Stage 1 CIM Wizard specific ⭐ NEW
 ├── stage2_sdv_pipeline_eclab_ctgan.py              # Stage 2 CTGAN (high quality)
 ├── stage2_sdv_pipeline_eclab.py                    # Stage 2 GaussianCopula (fast)
 ├── stage2_sdv_pipeline_ipazia.py                   # Stage 2 CTGAN GPU
@@ -1688,7 +1809,6 @@ ai4db/
 ├── stage3_augmentation_pipeline_eclab_openrouter.py           # Stage 3 OpenRouter
 ├── stage3_augmentation_pipeline_eclab.py           # Stage 3 Ollama
 ├── stage3_augmentation_pipeline_ipazia.py          # Stage 3 GPU
-├── cim_wizard_sql_generator.py                     # CIM-specific templates
 ├── rule_based_ssql_generator.py                    # Generic spatial SQL templates
 ├── setup_environment.sh                            # Automated environment setup
 ├── requirements.txt                                # Pip packages
@@ -1696,12 +1816,16 @@ ai4db/
 ├── .env.example                                    # API key template
 ├── .gitignore                                      # Protects .env files
 ├── README.md                                       # This documentation
+├── POSTGIS_PREFIX_UPDATE.md                        # PostGIS public schema docs ⭐ NEW
 ├── database_schemas/
 │   └── CIM_WIZARD_DATABASE_METADATA.md             # Database schema
 └── training_datasets/
-    ├── stage1_enhanced_dataset.jsonl               # Stage 1 output
+    ├── stage1_enhanced_dataset.jsonl               # Stage 1 general output
     ├── stage1_enhanced_dataset_eval.jsonl          # Evaluation subset
     ├── stage1_enhanced_dataset_stats.json          # Stage 1 statistics
+    ├── stage1_cim_dataset.jsonl                    # Stage 1 CIM output ⭐ NEW
+    ├── stage1_cim_dataset_eval.jsonl               # CIM evaluation subset ⭐ NEW
+    ├── stage1_cim_dataset_stats.json               # CIM statistics ⭐ NEW
     ├── stage2_synthetic_dataset_eclab_ctgan.jsonl  # Stage 2 CTGAN output
     ├── stage2_synthetic_dataset_eclab_ctgan_model.pkl      # Trained model
     ├── stage2_synthetic_dataset_eclab_ctgan_stats.json     # CTGAN statistics
@@ -1854,6 +1978,7 @@ This enhanced spatial SQL generation pipeline provides:
 
 **Ready to generate your dataset?**
 
+**Option 1: General Spatial SQL**
 ```bash
 cd ~/Desktop/ai4db
 conda activate ai4db
@@ -1870,10 +1995,35 @@ python stage3_augmentation_pipeline_eclab_openrouter_enhanced.py --multiplier 10
 # Result: ~400,000-500,000 high-quality (question, instruction, SQL) triples
 ```
 
+**Option 2: CIM Wizard Specific** ⭐ **RECOMMENDED for CIM Database**
+```bash
+cd ~/Desktop/coesi2/ai4db
+conda activate ai4db
+
+# Setup (one-time)
+cp .env.example .env
+nano .env  # Add your OPENROUTER_API_KEY
+
+# Run CIM-specific pipeline (2-4 hours)
+python stage1_cim.py 200 100
+python stage2_sdv_pipeline_eclab_ctgan.py 50000 300
+python stage3_augmentation_pipeline_eclab_openrouter_enhanced.py --multiplier 10
+
+# Result: ~400,000-500,000 high-quality CIM-specific triples
+# ✅ All queries use real UUIDs from your database
+# ✅ All queries include public.ST_* functions
+# ✅ All queries are immediately executable
+```
+
 **Happy Training!**
 
 ---
 
 **Last Updated:** October 20, 2025  
-**Version:** 3.0 (Comprehensive Consolidated Documentation)  
-**Status:** Production Ready
+**Version:** 3.1 (Added CIM Wizard Specific Generator with Real Database Integration)  
+**Status:** Production Ready  
+**New in 3.1:** 
+- `stage1_cim.py` - CIM Wizard specific generator
+- Real database UUIDs and values
+- PostGIS public schema compatibility
+- 25 CIM-specific templates with 70 PostGIS function updates

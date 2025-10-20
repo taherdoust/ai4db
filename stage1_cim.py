@@ -850,13 +850,13 @@ def generate_cim_templates() -> List[Tuple[str, str, str, Set[str]]]:
     templates.append((
         "CIM_A1_building_by_type",
         """
-SELECT b.building_id, b.lod, ST_Area(b.building_geometry) as area_sqm
+SELECT b.building_id, b.lod, public.ST_Area(b.building_geometry) as area_sqm
 FROM cim_vector.cim_wizard_building b
 JOIN cim_vector.cim_wizard_building_properties bp ON b.building_id = bp.building_id AND b.lod = bp.lod
 WHERE bp.project_id = '{project_id}' 
   AND bp.scenario_id = '{scenario_id}'
   AND bp.type = '{building_type}'
-  AND ST_Area(b.building_geometry) > {min_area}
+  AND public.ST_Area(b.building_geometry) > {min_area}
 LIMIT {limit};
         """.strip(),
         "Find buildings of specific type with area above threshold in a project scenario",
@@ -867,9 +867,9 @@ LIMIT {limit};
     templates.append((
         "CIM_A2_project_at_location",
         """
-SELECT ps.project_name, ps.scenario_name, ST_Area(ps.project_boundary) as project_area_sqm
+SELECT ps.project_name, ps.scenario_name, public.ST_Area(ps.project_boundary) as project_area_sqm
 FROM cim_vector.cim_wizard_project_scenario ps
-WHERE ST_Intersects(ps.project_boundary, ST_SetSRID(ST_MakePoint({lon}, {lat}), {srid}))
+WHERE public.ST_Intersects(ps.project_boundary, public.ST_SetSRID(public.ST_MakePoint({lon}, {lat}), {srid}))
 LIMIT {limit};
         """.strip(),
         "Find project scenarios that contain a specific geographic point",
@@ -880,7 +880,7 @@ LIMIT {limit};
     templates.append((
         "CIM_A3_grid_buses_by_voltage",
         """
-SELECT gb.bus_id, gb.name, gb.voltage_kv, ST_X(gb.geometry) as lon, ST_Y(gb.geometry) as lat
+SELECT gb.bus_id, gb.name, gb.voltage_kv, public.ST_X(gb.geometry) as lon, public.ST_Y(gb.geometry) as lat
 FROM cim_network.network_buses gb
 WHERE gb.voltage_kv >= {voltage_kv}
   AND gb.in_service = true
@@ -929,7 +929,7 @@ LIMIT {limit};
         "CIM_A6_building_distance",
         """
 SELECT b.building_id, 
-       ST_Distance(b.building_geometry, ST_SetSRID(ST_MakePoint({lon}, {lat}), {srid})) as distance_m
+       public.ST_Distance(b.building_geometry, public.ST_SetSRID(public.ST_MakePoint({lon}, {lat}), {srid})) as distance_m
 FROM cim_vector.cim_wizard_building b
 JOIN cim_vector.cim_wizard_building_properties bp ON b.building_id = bp.building_id AND b.lod = bp.lod
 WHERE bp.project_id = '{project_id}' 
@@ -945,13 +945,13 @@ LIMIT {limit};
     templates.append((
         "CIM_A7_buildings_in_project",
         """
-SELECT b.building_id, b.lod, bp.type, bp.height, ST_Area(b.building_geometry) as area_sqm
+SELECT b.building_id, b.lod, bp.type, bp.height, public.ST_Area(b.building_geometry) as area_sqm
 FROM cim_vector.cim_wizard_building b
 JOIN cim_vector.cim_wizard_building_properties bp ON b.building_id = bp.building_id AND b.lod = bp.lod
 JOIN cim_vector.cim_wizard_project_scenario ps ON bp.project_id = ps.project_id AND bp.scenario_id = ps.scenario_id
 WHERE ps.project_id = '{project_id}'
   AND ps.scenario_id = '{scenario_id}'
-  AND ST_Intersects(b.building_geometry, ps.project_boundary)
+  AND public.ST_Intersects(b.building_geometry, ps.project_boundary)
 LIMIT {limit};
         """.strip(),
         "Find buildings that intersect with a project boundary",
@@ -964,10 +964,10 @@ LIMIT {limit};
         """
 SELECT b.building_id, bp.type, bp.height, 
        c.SEZ2011, c.REGIONE, c.COMUNE,
-       ST_Area(b.building_geometry) as building_area_sqm
+       public.ST_Area(b.building_geometry) as building_area_sqm
 FROM cim_vector.cim_wizard_building b
 JOIN cim_vector.cim_wizard_building_properties bp ON b.building_id = bp.building_id AND b.lod = bp.lod
-JOIN cim_census.censusgeo c ON ST_Within(ST_Centroid(b.building_geometry), c.geometry)
+JOIN cim_census.censusgeo c ON public.ST_Within(public.ST_Centroid(b.building_geometry), c.geometry)
 WHERE bp.project_id = '{project_id}'
   AND bp.scenario_id = '{scenario_id}'
   AND c.REGIONE = '{region}'
@@ -983,9 +983,9 @@ LIMIT {limit};
         """
 SELECT c.SEZ2011, c.REGIONE, c.PROVINCIA, c.COMUNE,
        c.P1 as total_population,
-       ST_Area(c.geometry) as census_area_sqm
+       public.ST_Area(c.geometry) as census_area_sqm
 FROM cim_census.censusgeo c
-JOIN cim_vector.cim_wizard_project_scenario ps ON ST_Intersects(c.geometry, ps.project_boundary)
+JOIN cim_vector.cim_wizard_project_scenario ps ON public.ST_Intersects(c.geometry, ps.project_boundary)
 WHERE ps.project_id = '{project_id}'
   AND ps.scenario_id = '{scenario_id}'
 ORDER BY c.P1 DESC
@@ -1024,7 +1024,7 @@ ORDER BY building_count DESC;
 SELECT b.building_id, 
        bp.type,
        bp.height,
-       ST_Distance(b.building_geometry, gb.geometry) as distance_to_grid_m,
+       public.ST_Distance(b.building_geometry, gb.geometry) as distance_to_grid_m,
        gb.voltage_kv
 FROM cim_vector.cim_wizard_building b
 JOIN cim_vector.cim_wizard_building_properties bp ON b.building_id = bp.building_id AND b.lod = bp.lod
@@ -1033,7 +1033,7 @@ WHERE bp.project_id = '{project_id}'
   AND bp.scenario_id = '{scenario_id}'
   AND gb.voltage_kv >= {voltage_kv}
   AND gb.in_service = true
-  AND ST_DWithin(b.building_geometry, gb.geometry, {max_distance})
+  AND public.ST_DWithin(b.building_geometry, gb.geometry, {max_distance})
 ORDER BY distance_to_grid_m ASC
 LIMIT {limit};
         """.strip(),
@@ -1051,7 +1051,7 @@ SELECT cg.COMUNE as municipality,
        AVG(bp.area) as avg_building_area
 FROM cim_vector.cim_wizard_building b
 JOIN cim_vector.cim_wizard_building_properties bp ON b.building_id = bp.building_id AND b.lod = bp.lod
-JOIN cim_census.censusgeo cg ON ST_Within(ST_Centroid(b.building_geometry), cg.geometry)
+JOIN cim_census.censusgeo cg ON public.ST_Within(public.ST_Centroid(b.building_geometry), cg.geometry)
 WHERE bp.project_id = '{project_id}' 
   AND bp.scenario_id = '{scenario_id}'
 GROUP BY cg.COMUNE
@@ -1090,12 +1090,12 @@ LIMIT {limit};
 WITH buffered_buildings AS (
   SELECT b.building_id, 
          bp.type,
-         ST_Buffer(b.building_geometry, {buffer_distance}) as buffer_geom
+         public.ST_Buffer(b.building_geometry, {buffer_distance}) as buffer_geom
   FROM cim_vector.cim_wizard_building b
   JOIN cim_vector.cim_wizard_building_properties bp ON b.building_id = bp.building_id AND b.lod = bp.lod
   WHERE bp.project_id = '{project_id}' AND bp.scenario_id = '{scenario_id}'
 )
-SELECT building_id, type, ST_Area(buffer_geom) as buffer_area_sqm
+SELECT building_id, type, public.ST_Area(buffer_geom) as buffer_area_sqm
 FROM buffered_buildings
 ORDER BY buffer_area_sqm DESC
 LIMIT {limit};
@@ -1129,7 +1129,7 @@ ORDER BY avg_unemployment_rate DESC;
 SELECT b1.building_id,
        bp1.type,
        bp1.height,
-       ST_Distance(ST_Centroid(b1.building_geometry), ST_Centroid(b2.building_geometry)) as distance_m
+       public.ST_Distance(public.ST_Centroid(b1.building_geometry), public.ST_Centroid(b2.building_geometry)) as distance_m
 FROM cim_vector.cim_wizard_building b1
 JOIN cim_vector.cim_wizard_building_properties bp1 ON b1.building_id = bp1.building_id AND b1.lod = bp1.lod
 CROSS JOIN cim_vector.cim_wizard_building b2
@@ -1137,7 +1137,7 @@ WHERE bp1.project_id = '{project_id}'
   AND bp1.scenario_id = '{scenario_id}'
   AND b2.building_id = '{census_id}'
   AND b1.building_id != b2.building_id
-  AND ST_Distance(ST_Centroid(b1.building_geometry), ST_Centroid(b2.building_geometry)) < {max_distance}
+  AND public.ST_Distance(public.ST_Centroid(b1.building_geometry), public.ST_Centroid(b2.building_geometry)) < {max_distance}
 ORDER BY distance_m ASC
 LIMIT 10;
         """.strip(),
@@ -1152,7 +1152,7 @@ LIMIT 10;
 SELECT gb.bus_id,
        gb.name,
        gb.voltage_kv,
-       ST_Distance(ST_Centroid(b.building_geometry), gb.geometry) as distance_m
+       public.ST_Distance(public.ST_Centroid(b.building_geometry), gb.geometry) as distance_m
 FROM cim_vector.cim_wizard_building b
 JOIN cim_vector.cim_wizard_building_properties bp ON b.building_id = bp.building_id AND b.lod = bp.lod
 CROSS JOIN cim_network.network_buses gb
@@ -1173,13 +1173,13 @@ LIMIT 1;
         """
 SELECT 
     'DTM' as raster_type,
-    AVG((ST_SummaryStats(rast)).mean) as avg_elevation,
+    AVG((public.ST_SummaryStats(rast)).mean) as avg_elevation,
     COUNT(*) as tile_count
 FROM cim_raster.dtm
 UNION ALL
 SELECT 
     'DSM' as raster_type,
-    AVG((ST_SummaryStats(rast)).mean) as avg_elevation,
+    AVG((public.ST_SummaryStats(rast)).mean) as avg_elevation,
     COUNT(*) as tile_count
 FROM cim_raster.dsm_sansalva;
         """.strip(),
@@ -1197,7 +1197,7 @@ WITH building_metrics AS (
   SELECT b.building_id,
          bp.type,
          bp.height as declared_height,
-         ST_Area(b.building_geometry) as footprint_area,
+         public.ST_Area(b.building_geometry) as footprint_area,
          bp.n_people,
          bp.area as building_area,
          CASE 
@@ -1236,7 +1236,7 @@ ORDER BY building_count DESC;
         """
 WITH spatial_clusters AS (
   SELECT b.building_id, bp.type, bp.n_people,
-         ST_ClusterDBSCAN(ST_Centroid(b.building_geometry), eps := {cluster_distance}, minpoints := {min_points}) 
+         public.ST_ClusterDBSCAN(public.ST_Centroid(b.building_geometry), eps := {cluster_distance}, minpoints := {min_points}) 
          OVER (PARTITION BY bp.type) AS cluster_id
   FROM cim_vector.cim_wizard_building b
   JOIN cim_vector.cim_wizard_building_properties bp ON b.building_id = bp.building_id AND b.lod = bp.lod
@@ -1267,16 +1267,16 @@ LIMIT {limit};
 WITH building_census_overlay AS (
   SELECT b.building_id, bp.type, bp.height, bp.area, bp.n_people,
          c.SEZ2011, c.P1 as census_population, c.REGIONE, c.PROVINCIA,
-         ST_Area(ST_Intersection(b.building_geometry, c.geometry)) / ST_Area(b.building_geometry) as overlap_ratio
+         public.ST_Area(public.ST_Intersection(b.building_geometry, c.geometry)) / public.ST_Area(b.building_geometry) as overlap_ratio
   FROM cim_vector.cim_wizard_building b
   JOIN cim_vector.cim_wizard_building_properties bp ON b.building_id = bp.building_id AND b.lod = bp.lod
-  JOIN cim_census.censusgeo c ON ST_Intersects(b.building_geometry, c.geometry)
+  JOIN cim_census.censusgeo c ON public.ST_Intersects(b.building_geometry, c.geometry)
   WHERE bp.project_id = '{project_id}' AND bp.scenario_id = '{scenario_id}'
-    AND ST_Area(ST_Intersection(b.building_geometry, c.geometry)) / ST_Area(b.building_geometry) > 0.5
+    AND public.ST_Area(public.ST_Intersection(b.building_geometry, c.geometry)) / public.ST_Area(b.building_geometry) > 0.5
 ),
 grid_proximity AS (
   SELECT bco.building_id, bco.type, bco.height, bco.REGIONE,
-         MIN(ST_Distance(b.building_geometry, gb.geometry)) as min_grid_distance
+         MIN(public.ST_Distance(b.building_geometry, gb.geometry)) as min_grid_distance
   FROM building_census_overlay bco
   JOIN cim_vector.cim_wizard_building b ON bco.building_id = b.building_id
   CROSS JOIN cim_network.network_buses gb
@@ -1303,13 +1303,13 @@ ORDER BY building_count DESC;
 SELECT b.building_id,
        bp.type,
        bp.height as declared_height,
-       ST_Value(dtm.rast, ST_Centroid(b.building_geometry)) as ground_elevation,
-       ST_Value(dsm.rast, ST_Centroid(b.building_geometry)) as surface_elevation,
-       ST_Area(b.building_geometry) as footprint_area
+       public.ST_Value(dtm.rast, public.ST_Centroid(b.building_geometry)) as ground_elevation,
+       public.ST_Value(dsm.rast, public.ST_Centroid(b.building_geometry)) as surface_elevation,
+       public.ST_Area(b.building_geometry) as footprint_area
 FROM cim_vector.cim_wizard_building b
 JOIN cim_vector.cim_wizard_building_properties bp ON b.building_id = bp.building_id AND b.lod = bp.lod
-JOIN cim_raster.dtm dtm ON ST_Intersects(dtm.rast, b.building_geometry)
-JOIN cim_raster.dsm_sansalva dsm ON ST_Intersects(dsm.rast, b.building_geometry)
+JOIN cim_raster.dtm dtm ON public.ST_Intersects(dtm.rast, b.building_geometry)
+JOIN cim_raster.dsm_sansalva dsm ON public.ST_Intersects(dsm.rast, b.building_geometry)
 WHERE bp.project_id = '{project_id}' 
   AND bp.scenario_id = '{scenario_id}'
   AND bp.type = '{building_type}'
@@ -1366,14 +1366,14 @@ WITH project_census AS (
   SELECT ps.project_id, ps.scenario_id, ps.project_name,
          c.SEZ2011, c.REGIONE, c.geometry
   FROM cim_vector.cim_wizard_project_scenario ps
-  JOIN cim_census.censusgeo c ON ST_Intersects(ps.project_boundary, c.geometry)
+  JOIN cim_census.censusgeo c ON public.ST_Intersects(ps.project_boundary, c.geometry)
   WHERE ps.project_id = '{project_id}'
     AND ps.scenario_id = '{scenario_id}'
 )
 SELECT project_id, scenario_id, project_name,
        COUNT(DISTINCT SEZ2011) as census_zones_count,
-       ST_Union(geometry) as merged_census_boundary,
-       ST_Area(ST_Union(geometry)) as total_area_sqm
+       public.ST_Union(geometry) as merged_census_boundary,
+       public.ST_Area(public.ST_Union(geometry)) as total_area_sqm
 FROM project_census
 GROUP BY project_id, scenario_id, project_name;
         """.strip(),
@@ -1390,12 +1390,12 @@ WITH project_overlaps AS (
          p1.project_name as project1_name,
          p2.project_id as project2_id,
          p2.project_name as project2_name,
-         ST_Area(p1.project_boundary) as project1_area,
-         ST_Area(ST_Intersection(p1.project_boundary, p2.project_boundary)) as overlap_area
+         public.ST_Area(p1.project_boundary) as project1_area,
+         public.ST_Area(public.ST_Intersection(p1.project_boundary, p2.project_boundary)) as overlap_area
   FROM cim_vector.cim_wizard_project_scenario p1
   CROSS JOIN cim_vector.cim_wizard_project_scenario p2
   WHERE p1.project_id < p2.project_id
-    AND ST_Intersects(p1.project_boundary, p2.project_boundary)
+    AND public.ST_Intersects(p1.project_boundary, p2.project_boundary)
 ),
 overlap_percentages AS (
   SELECT project1_id, project1_name,
@@ -1430,10 +1430,10 @@ WITH building_geom AS (
 )
 SELECT bg.building_id,
        bg.type,
-       ST_Clip(dtm.rast, bg.building_geometry, true) as clipped_dtm_raster,
-       (ST_SummaryStats(ST_Clip(dtm.rast, bg.building_geometry, true))).mean as avg_ground_elevation
+       public.ST_Clip(dtm.rast, bg.building_geometry, true) as clipped_dtm_raster,
+       (public.ST_SummaryStats(public.ST_Clip(dtm.rast, bg.building_geometry, true))).mean as avg_ground_elevation
 FROM building_geom bg
-JOIN cim_raster.dtm dtm ON ST_Intersects(dtm.rast, bg.building_geometry)
+JOIN cim_raster.dtm dtm ON public.ST_Intersects(dtm.rast, bg.building_geometry)
 LIMIT 1;
         """.strip(),
         "Clip DTM raster by building footprint and extract elevation statistics",
@@ -1456,11 +1456,11 @@ raster_values AS (
   SELECT bg.building_id,
          bg.type,
          bg.declared_height,
-         (ST_SummaryStats(ST_Clip(dsm.rast, bg.building_geometry, true))).mean as avg_surface_elevation,
-         (ST_SummaryStats(ST_Clip(dtm.rast, bg.building_geometry, true))).mean as avg_ground_elevation
+         (public.ST_SummaryStats(public.ST_Clip(dsm.rast, bg.building_geometry, true))).mean as avg_surface_elevation,
+         (public.ST_SummaryStats(public.ST_Clip(dtm.rast, bg.building_geometry, true))).mean as avg_ground_elevation
   FROM building_geom bg
-  JOIN cim_raster.dsm_sansalva dsm ON ST_Intersects(dsm.rast, bg.building_geometry)
-  JOIN cim_raster.dtm dtm ON ST_Intersects(dtm.rast, bg.building_geometry)
+  JOIN cim_raster.dsm_sansalva dsm ON public.ST_Intersects(dsm.rast, bg.building_geometry)
+  JOIN cim_raster.dtm dtm ON public.ST_Intersects(dtm.rast, bg.building_geometry)
 )
 SELECT building_id,
        type,

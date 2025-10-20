@@ -401,7 +401,15 @@ CIM_PARAMETERS = {
     "regions": ["Lombardia", "Emilia-Romagna", "Lazio", "Piemonte", "Toscana"],
     "provinces": ["Milano", "Bologna", "Roma", "Torino", "Firenze"],
     "voltage_levels": [0.4, 10, 20, 132, 220, 400],
-    "srids": [4326, 3857, 32632, 32633]
+    "srids": [4326, 3857, 32632, 32633],
+    "building_ids": [
+        "259f59e2-20c4-45d4-88b9-298022fd9c7f",
+        "8767d7e9-3904-4a99-bb11-875e1b01655d",
+        "0f42a8db-1d98-4e65-8365-93d24cd4a9c1",
+        "44f4deb0-6db2-418b-864b-260db8e08276",
+        "cd776f43-b83b-4d07-be6f-3371fb498758"
+    ],
+    "overlap_thresholds": [10, 20, 30, 40, 50, 60, 70, 80]
 }
 
 def generate_realistic_values() -> Dict[str, any]:
@@ -415,6 +423,8 @@ def generate_realistic_values() -> Dict[str, any]:
         "province": random.choice(CIM_PARAMETERS["provinces"]),
         "voltage_kv": random.choice(CIM_PARAMETERS["voltage_levels"]),
         "srid": random.choice(CIM_PARAMETERS["srids"]),
+        "building_id": random.choice(CIM_PARAMETERS["building_ids"]),
+        "overlap_threshold": random.choice(CIM_PARAMETERS["overlap_thresholds"]),
         "buffer_distance": random.choice([100, 500, 1000, 2000]),
         "min_area": random.randint(50, 500),
         "max_area": random.randint(1000, 5000),
@@ -423,7 +433,7 @@ def generate_realistic_values() -> Dict[str, any]:
         "min_people": random.randint(1, 5),
         "max_people": random.randint(6, 20),
         "year": random.randint(1950, 2024),
-        "census_id": random.randint(1000000, 9999999),
+        "census_id": random.choice(CIM_PARAMETERS["building_ids"]),  # Use building_id for census_id placeholder
         "lon": round(random.uniform(7.0, 18.0), 6),
         "lat": round(random.uniform(36.0, 47.0), 6),
         "limit": random.choice([10, 25, 50, 100]),
@@ -808,6 +818,60 @@ LIMIT {limit};
         {"building", "distance", "measurement", "basic"}
     ))
     
+    # A7: Buildings inside project boundary
+    templates.append((
+        "CIM_A7_buildings_in_project",
+        """
+SELECT b.building_id, b.lod, bp.type, bp.height, ST_Area(b.building_geometry) as area_sqm
+FROM cim_vector.cim_wizard_building b
+JOIN cim_vector.cim_wizard_building_properties bp ON b.building_id = bp.building_id AND b.lod = bp.lod
+JOIN cim_vector.cim_wizard_project_scenario ps ON bp.project_id = ps.project_id AND bp.scenario_id = ps.scenario_id
+WHERE ps.project_id = '{project_id}'
+  AND ps.scenario_id = '{scenario_id}'
+  AND ST_Intersects(b.building_geometry, ps.project_boundary)
+LIMIT {limit};
+        """.strip(),
+        "Find buildings that intersect with a project boundary",
+        {"building", "project", "spatial_predicate", "basic"}
+    ))
+    
+    # A8: Buildings inside census zone
+    templates.append((
+        "CIM_A8_buildings_in_census",
+        """
+SELECT b.building_id, bp.type, bp.height, 
+       c.SEZ2011, c.REGIONE, c.COMUNE,
+       ST_Area(b.building_geometry) as building_area_sqm
+FROM cim_vector.cim_wizard_building b
+JOIN cim_vector.cim_wizard_building_properties bp ON b.building_id = bp.building_id AND b.lod = bp.lod
+JOIN cim_census.censusgeo c ON ST_Within(ST_Centroid(b.building_geometry), c.geometry)
+WHERE bp.project_id = '{project_id}'
+  AND bp.scenario_id = '{scenario_id}'
+  AND c.REGIONE = '{region}'
+LIMIT {limit};
+        """.strip(),
+        "Find buildings within a specific census zone by region",
+        {"building", "census", "spatial_predicate", "basic"}
+    ))
+    
+    # A9: Census zones intersecting project boundary
+    templates.append((
+        "CIM_A9_census_in_project",
+        """
+SELECT c.SEZ2011, c.REGIONE, c.PROVINCIA, c.COMUNE,
+       c.P1 as total_population,
+       ST_Area(c.geometry) as census_area_sqm
+FROM cim_census.censusgeo c
+JOIN cim_vector.cim_wizard_project_scenario ps ON ST_Intersects(c.geometry, ps.project_boundary)
+WHERE ps.project_id = '{project_id}'
+  AND ps.scenario_id = '{scenario_id}'
+ORDER BY c.P1 DESC
+LIMIT {limit};
+        """.strip(),
+        "Find census zones that intersect with a project boundary",
+        {"census", "project", "spatial_predicate", "basic"}
+    ))
+    
     # ========== COMPLEXITY B: INTERMEDIATE OPERATIONS ==========
     
     # B1: Building statistics by type
@@ -933,6 +997,71 @@ ORDER BY avg_unemployment_rate DESC;
         """.strip(),
         "Analyze employment and unemployment rates by province",
         {"census", "employment", "aggregation", "statistics"}
+    ))
+    
+    # B7: Nearest buildings to a specific building
+    templates.append((
+        "CIM_B7_nearest_buildings",
+        """
+SELECT b1.building_id,
+       bp1.type,
+       bp1.height,
+       ST_Distance(ST_Centroid(b1.building_geometry), ST_Centroid(b2.building_geometry)) as distance_m
+FROM cim_vector.cim_wizard_building b1
+JOIN cim_vector.cim_wizard_building_properties bp1 ON b1.building_id = bp1.building_id AND b1.lod = bp1.lod
+CROSS JOIN cim_vector.cim_wizard_building b2
+WHERE bp1.project_id = '{project_id}'
+  AND bp1.scenario_id = '{scenario_id}'
+  AND b2.building_id = '{census_id}'
+  AND b1.building_id != b2.building_id
+  AND ST_Distance(ST_Centroid(b1.building_geometry), ST_Centroid(b2.building_geometry)) < {max_distance}
+ORDER BY distance_m ASC
+LIMIT 10;
+        """.strip(),
+        "Find 10 nearest buildings to a specific building using centroid distance within threshold",
+        {"building", "distance", "nearest_neighbor", "proximity"}
+    ))
+    
+    # B8: Closest grid bus to a building
+    templates.append((
+        "CIM_B8_closest_grid_to_building",
+        """
+SELECT gb.bus_id,
+       gb.name,
+       gb.voltage_kv,
+       ST_Distance(ST_Centroid(b.building_geometry), gb.geometry) as distance_m
+FROM cim_vector.cim_wizard_building b
+JOIN cim_vector.cim_wizard_building_properties bp ON b.building_id = bp.building_id AND b.lod = bp.lod
+CROSS JOIN cim_network.network_buses gb
+WHERE b.building_id = '{census_id}'
+  AND bp.project_id = '{project_id}'
+  AND bp.scenario_id = '{scenario_id}'
+  AND gb.in_service = true
+ORDER BY distance_m ASC
+LIMIT 1;
+        """.strip(),
+        "Find the closest grid bus to a specific building by centroid distance",
+        {"building", "grid", "nearest_neighbor", "distance"}
+    ))
+    
+    # B9: Average raster elevation analysis
+    templates.append((
+        "CIM_B9_raster_average_elevation",
+        """
+SELECT 
+    'DTM' as raster_type,
+    AVG((ST_SummaryStats(rast)).mean) as avg_elevation,
+    COUNT(*) as tile_count
+FROM cim_raster.dtm
+UNION ALL
+SELECT 
+    'DSM' as raster_type,
+    AVG((ST_SummaryStats(rast)).mean) as avg_elevation,
+    COUNT(*) as tile_count
+FROM cim_raster.dsm_sansalva;
+        """.strip(),
+        "Calculate average elevation values from DTM and DSM rasters",
+        {"raster", "elevation", "statistics", "analysis"}
     ))
     
     # ========== COMPLEXITY C: ADVANCED OPERATIONS ==========
@@ -1104,6 +1233,123 @@ ORDER BY avg_aging_ratio DESC;
         """.strip(),
         "Comprehensive demographic transition analysis combining aging and modernization indicators",
         {"census", "demographics", "advanced", "cte", "statistical_analysis"}
+    ))
+    
+    # C6: Merge census zones for project boundary
+    templates.append((
+        "CIM_C6_merge_census_zones",
+        """
+WITH project_census AS (
+  SELECT ps.project_id, ps.scenario_id, ps.project_name,
+         c.SEZ2011, c.REGIONE, c.geometry
+  FROM cim_vector.cim_wizard_project_scenario ps
+  JOIN cim_census.censusgeo c ON ST_Intersects(ps.project_boundary, c.geometry)
+  WHERE ps.project_id = '{project_id}'
+    AND ps.scenario_id = '{scenario_id}'
+)
+SELECT project_id, scenario_id, project_name,
+       COUNT(DISTINCT SEZ2011) as census_zones_count,
+       ST_Union(geometry) as merged_census_boundary,
+       ST_Area(ST_Union(geometry)) as total_area_sqm
+FROM project_census
+GROUP BY project_id, scenario_id, project_name;
+        """.strip(),
+        "Merge all census zones intersecting with project to create unified census boundary",
+        {"census", "project", "union", "aggregation", "advanced", "cte"}
+    ))
+    
+    # C7: Projects with overlapping land coverage
+    templates.append((
+        "CIM_C7_overlapping_projects",
+        """
+WITH project_overlaps AS (
+  SELECT p1.project_id as project1_id,
+         p1.project_name as project1_name,
+         p2.project_id as project2_id,
+         p2.project_name as project2_name,
+         ST_Area(p1.project_boundary) as project1_area,
+         ST_Area(ST_Intersection(p1.project_boundary, p2.project_boundary)) as overlap_area
+  FROM cim_vector.cim_wizard_project_scenario p1
+  CROSS JOIN cim_vector.cim_wizard_project_scenario p2
+  WHERE p1.project_id < p2.project_id
+    AND ST_Intersects(p1.project_boundary, p2.project_boundary)
+),
+overlap_percentages AS (
+  SELECT project1_id, project1_name,
+         project2_id, project2_name,
+         overlap_area,
+         ROUND((overlap_area / NULLIF(project1_area, 0)) * 100, 2) as overlap_percentage
+  FROM project_overlaps
+)
+SELECT project1_id, project1_name,
+       project2_id, project2_name,
+       overlap_area as overlap_sqm,
+       overlap_percentage
+FROM overlap_percentages
+WHERE overlap_percentage >= {overlap_threshold}
+ORDER BY overlap_percentage DESC;
+        """.strip(),
+        "Find projects covering same land with more than specified percentage overlap",
+        {"project", "overlap", "intersection", "percentage", "advanced", "cte"}
+    ))
+    
+    # C8: Clip raster by building footprint
+    templates.append((
+        "CIM_C8_clip_raster_by_building",
+        """
+WITH building_geom AS (
+  SELECT b.building_id, bp.type, b.building_geometry
+  FROM cim_vector.cim_wizard_building b
+  JOIN cim_vector.cim_wizard_building_properties bp ON b.building_id = bp.building_id AND b.lod = bp.lod
+  WHERE b.building_id = '{census_id}'
+    AND bp.project_id = '{project_id}'
+    AND bp.scenario_id = '{scenario_id}'
+)
+SELECT bg.building_id,
+       bg.type,
+       ST_Clip(dtm.rast, bg.building_geometry, true) as clipped_dtm_raster,
+       (ST_SummaryStats(ST_Clip(dtm.rast, bg.building_geometry, true))).mean as avg_ground_elevation
+FROM building_geom bg
+JOIN cim_raster.dtm dtm ON ST_Intersects(dtm.rast, bg.building_geometry)
+LIMIT 1;
+        """.strip(),
+        "Clip DTM raster by building footprint and extract elevation statistics",
+        {"building", "raster", "clip", "processing", "advanced", "cte"}
+    ))
+    
+    # C9: Calculate building height from DSM and DTM difference
+    templates.append((
+        "CIM_C9_building_height_from_rasters",
+        """
+WITH building_geom AS (
+  SELECT b.building_id, bp.type, bp.height as declared_height, b.building_geometry
+  FROM cim_vector.cim_wizard_building b
+  JOIN cim_vector.cim_wizard_building_properties bp ON b.building_id = bp.building_id AND b.lod = bp.lod
+  WHERE b.building_id = '{census_id}'
+    AND bp.project_id = '{project_id}'
+    AND bp.scenario_id = '{scenario_id}'
+),
+raster_values AS (
+  SELECT bg.building_id,
+         bg.type,
+         bg.declared_height,
+         (ST_SummaryStats(ST_Clip(dsm.rast, bg.building_geometry, true))).mean as avg_surface_elevation,
+         (ST_SummaryStats(ST_Clip(dtm.rast, bg.building_geometry, true))).mean as avg_ground_elevation
+  FROM building_geom bg
+  JOIN cim_raster.dsm_sansalva dsm ON ST_Intersects(dsm.rast, bg.building_geometry)
+  JOIN cim_raster.dtm dtm ON ST_Intersects(dtm.rast, bg.building_geometry)
+)
+SELECT building_id,
+       type,
+       declared_height,
+       ROUND(avg_surface_elevation, 2) as avg_surface_elevation_m,
+       ROUND(avg_ground_elevation, 2) as avg_ground_elevation_m,
+       ROUND(avg_surface_elevation - avg_ground_elevation, 2) as calculated_height_m,
+       ROUND(ABS(declared_height - (avg_surface_elevation - avg_ground_elevation)), 2) as height_difference_m
+FROM raster_values;
+        """.strip(),
+        "Calculate building height from DSM and DTM raster difference and compare with declared height",
+        {"building", "raster", "clip", "height_calculation", "advanced", "cte", "multi_raster"}
     ))
     
     return templates

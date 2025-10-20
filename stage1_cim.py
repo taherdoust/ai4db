@@ -394,38 +394,158 @@ QUESTION_TONES = {
 # ============================================================================
 
 CIM_PARAMETERS = {
-    "project_ids": ["milan_smart_district", "bologna_energy_hub", "rome_green_quarter", "turin_innovation_zone", "florence_heritage_area"],
-    "scenario_ids": ["baseline", "renewable_2030", "efficiency_max", "grid_modernization", "zero_emission"],
-    "building_types": ["residential", "commercial", "industrial", "mixed_use", "public"],
+    # Real project-scenario pairs from database
+    "project_scenario_pairs": [
+        {
+            "project_id": "4be7d1ff-e8bf-4374-a13e-67e7b0d52eb1",
+            "scenario_id": "4be7d1ff-e8bf-4374-a13e-67e7b0d52eb1",
+            "project_name": "Sansalva_filter",
+            "scenario_name": "baseline"
+        },
+        {
+            "project_id": "5a00fa63-2ef4-4d38-baa0-48ae5d80d21a",
+            "scenario_id": "5a00fa63-2ef4-4d38-baa0-48ae5d80d21a",
+            "project_name": "Sansalva_filter",
+            "scenario_name": "sansalva3.5"
+        },
+        {
+            "project_id": "e983d9e4-70ce-43e1-b778-03c25d992433",
+            "scenario_id": "e983d9e4-70ce-43e1-b778-03c25d992433",
+            "project_name": "Sansalva_filter_3",
+            "scenario_name": "sansalva3"
+        },
+        {
+            "project_id": "aeba11e7-ab0e-46ca-b89f-4c856c0289bf",
+            "scenario_id": "aeba11e7-ab0e-46ca-b89f-4c856c0289bf",
+            "project_name": "Sansalva_filter_4",
+            "scenario_name": "sansalva4"
+        }
+    ],
+    
+    # Extracted unique values for backward compatibility
+    "project_ids": [
+        "4be7d1ff-e8bf-4374-a13e-67e7b0d52eb1",
+        "5a00fa63-2ef4-4d38-baa0-48ae5d80d21a",
+        "e983d9e4-70ce-43e1-b778-03c25d992433",
+        "aeba11e7-ab0e-46ca-b89f-4c856c0289bf"
+    ],
+    "scenario_ids": [
+        "4be7d1ff-e8bf-4374-a13e-67e7b0d52eb1",
+        "5a00fa63-2ef4-4d38-baa0-48ae5d80d21a",
+        "e983d9e4-70ce-43e1-b778-03c25d992433",
+        "aeba11e7-ab0e-46ca-b89f-4c856c0289bf"
+    ],
+    "project_names": ["Sansalva_filter", "Sansalva_filter_3", "Sansalva_filter_4"],
+    "scenario_names": ["baseline", "sansalva3.5", "sansalva3", "sansalva4"],
+    
+    # Real building types from database
+    "building_types": ["residential", "non-residential"],
+    
+    # HVAC types (not in current schema, using defaults for future use)
     "hvac_types": ["heat_pump", "gas_boiler", "district_heating", "electric", "hybrid"],
+    
+    # Census data (columns exist but are empty in current database, using defaults)
     "regions": ["Lombardia", "Emilia-Romagna", "Lazio", "Piemonte", "Toscana"],
     "provinces": ["Milano", "Bologna", "Roma", "Torino", "Firenze"],
-    "voltage_levels": [0.4, 10, 20, 132, 220, 400],
+    
+    # Real voltage levels from network_buses
+    "voltage_levels": [0.4, 20.0, 132.0, 400.0],
+    
+    # Standard SRIDs
     "srids": [4326, 3857, 32632, 32633],
+    
+    # Real building IDs from database (50 actual UUIDs)
     "building_ids": [
-        "259f59e2-20c4-45d4-88b9-298022fd9c7f",
-        "8767d7e9-3904-4a99-bb11-875e1b01655d",
-        "0f42a8db-1d98-4e65-8365-93d24cd4a9c1",
-        "44f4deb0-6db2-418b-864b-260db8e08276",
-        "cd776f43-b83b-4d07-be6f-3371fb498758"
+        "0033de25-d7d1-48d5-98c3-bc02973a13c0",
+        "0040217f-9865-4cab-9478-731e0c443a85",
+        "0047ba60-0b2f-4b72-878e-02fe589ed37f",
+        "0054c487-661b-493d-a819-e143b6c66e52",
+        "00633a25-715f-4e23-9c24-c8c5e4e2678c",
+        "0069f14b-4147-4254-a727-04198d14fab6",
+        "007a2247-cdcd-49d0-8d30-6d249f9a3124",
+        "0086830a-2510-4f23-926d-5d215729cc56",
+        "00887359-a93c-4b0c-8cb8-1535ae3ad1f7",
+        "008a63aa-6819-4f6b-b594-1206eac879d8",
+        "0098d25a-d0b1-4081-ba67-ae9112bbbf95",
+        "00a42bee-c946-48fc-9603-fdf82979a7af",
+        "00b01e23-3003-4864-a2f4-28e2efaf6d4b",
+        "00b21ae4-2343-42ee-8c53-e12e4a96e409",
+        "00b272c0-0e93-4d53-a969-d768c3280dce",
+        "00c2d7d0-83a6-4f68-bb47-a3ece88124be",
+        "00e03e68-75cd-4e76-990e-a5295c721e2e",
+        "00f14319-532d-4ee5-b45a-32cf19d26a73",
+        "00fe1681-93ca-4309-a17b-287b3f2ca616",
+        "010454b9-5b54-4208-90ce-41c2b181c852",
+        "012d11ed-97f7-46a8-ad80-ed38320b3fa8",
+        "012e9e8b-90af-45c6-a617-63df7bfaa464",
+        "013d45a8-3563-42a0-a01c-335ea67d1070",
+        "014844ab-0449-47ef-bd20-797f10d7f4d6",
+        "0169cc81-9df2-4f16-9390-949e940c5b4c",
+        "01764da2-a801-4dec-83bf-3a535fd083ab",
+        "01808035-47bd-4a6f-81ba-07ef5e44f93d",
+        "019d513c-9bea-4f34-89ac-91edd496f40c",
+        "019ee682-7c8e-4e1d-9bcd-877b6f2d1bb7",
+        "01a0c47e-abb0-4327-9f30-f5f845b5defa",
+        "01a94fd3-07e3-4ada-8014-9d7bd68a4a97",
+        "01ad56a4-5437-41a8-b09d-eff4007d794d",
+        "01b71fdb-8ac8-4cdf-be29-943872fda5b3",
+        "0216d44d-d352-4f12-bd16-79ba0f2dc167",
+        "021d6573-e91d-409f-89f6-72a608238220",
+        "022f4517-5ac0-4ec3-9169-6f34b445869a",
+        "024447c1-1d36-4322-8be3-bc338c082a07",
+        "02491899-ba02-4ed3-afca-43985ff180d8",
+        "026e8641-2eec-4b1f-bcc8-145c6ce5cc38",
+        "029b85a4-6f63-4970-b0e3-2c2875388334",
+        "02b81f56-6754-4a53-9fea-e93380f1242f",
+        "02cb3c45-a390-4cdb-ad56-b4d4bc31568c",
+        "02f3c101-222f-4f48-8a0a-6aee8b7c50e8",
+        "03121e2b-62b8-466f-9595-a5145e1ca2df",
+        "03158862-3db7-4c34-a566-92e512c4b29b",
+        "032a80f4-2c0b-4fc5-adb5-ef81072c4fcb",
+        "0331072a-ce76-4992-a80a-fbfe2bd45ce6",
+        "0346fe08-1688-474e-81bf-ad26c1b79c42",
+        "036a709d-07e7-412e-9c7a-5460f6820ed9",
+        "036d2174-245d-4021-90e7-58d95ee6c577"
     ],
+    
+    # Overlap thresholds for spatial analysis
     "overlap_thresholds": [10, 20, 30, 40, 50, 60, 70, 80]
 }
 
 def generate_realistic_values() -> Dict[str, any]:
-    """Generate realistic parameter values for CIM database queries"""
+    """Generate realistic parameter values for CIM database queries using actual database data"""
+    
+    # Select a random project-scenario pair (ensures valid combination)
+    proj_scen_pair = random.choice(CIM_PARAMETERS["project_scenario_pairs"])
+    
     return {
-        "project_id": random.choice(CIM_PARAMETERS["project_ids"]),
-        "scenario_id": random.choice(CIM_PARAMETERS["scenario_ids"]),
+        # Use matched project-scenario pairs from real database
+        "project_id": proj_scen_pair["project_id"],
+        "scenario_id": proj_scen_pair["scenario_id"],
+        "project_name": proj_scen_pair["project_name"],
+        "scenario_name": proj_scen_pair["scenario_name"],
+        
+        # Real building data
         "building_type": random.choice(CIM_PARAMETERS["building_types"]),
+        "building_id": random.choice(CIM_PARAMETERS["building_ids"]),
+        "census_id": random.choice(CIM_PARAMETERS["building_ids"]),  # Use building_id for census_id placeholder
+        
+        # Network and infrastructure
         "hvac_type": random.choice(CIM_PARAMETERS["hvac_types"]),
+        "voltage_kv": random.choice(CIM_PARAMETERS["voltage_levels"]),
+        
+        # Geographic and administrative
         "region": random.choice(CIM_PARAMETERS["regions"]),
         "province": random.choice(CIM_PARAMETERS["provinces"]),
-        "voltage_kv": random.choice(CIM_PARAMETERS["voltage_levels"]),
         "srid": random.choice(CIM_PARAMETERS["srids"]),
-        "building_id": random.choice(CIM_PARAMETERS["building_ids"]),
+        
+        # Spatial analysis parameters
         "overlap_threshold": random.choice(CIM_PARAMETERS["overlap_thresholds"]),
         "buffer_distance": random.choice([100, 500, 1000, 2000]),
+        "max_distance": random.choice([500, 1000, 2000, 5000]),
+        "cluster_distance": random.choice([1000, 2000, 5000]),
+        
+        # Numeric thresholds
         "min_area": random.randint(50, 500),
         "max_area": random.randint(1000, 5000),
         "min_height": random.randint(3, 10),
@@ -433,18 +553,21 @@ def generate_realistic_values() -> Dict[str, any]:
         "min_people": random.randint(1, 5),
         "max_people": random.randint(6, 20),
         "year": random.randint(1950, 2024),
-        "census_id": random.choice(CIM_PARAMETERS["building_ids"]),  # Use building_id for census_id placeholder
-        "lon": round(random.uniform(7.0, 18.0), 6),
-        "lat": round(random.uniform(36.0, 47.0), 6),
-        "limit": random.choice([10, 25, 50, 100]),
+        "min_population": random.choice([100, 500, 1000]),
+        "min_buildings": random.choice([5, 10, 20]),
+        "min_areas": random.choice([3, 5, 10]),
+        
+        # Clustering parameters
         "cluster_count": random.choice([3, 5, 8, 10]),
         "min_cluster_size": random.choice([3, 5, 10]),
-        "max_distance": random.choice([500, 1000, 2000, 5000]),
-        "min_buildings": random.choice([5, 10, 20]),
         "min_points": random.choice([3, 5, 8]),
-        "min_areas": random.choice([3, 5, 10]),
-        "cluster_distance": random.choice([1000, 2000, 5000]),
-        "min_population": random.choice([100, 500, 1000])
+        
+        # Coordinates (approximate bounds for Italy)
+        "lon": round(random.uniform(7.0, 18.0), 6),
+        "lat": round(random.uniform(36.0, 47.0), 6),
+        
+        # Query limits
+        "limit": random.choice([10, 25, 50, 100])
     }
 
 # ============================================================================

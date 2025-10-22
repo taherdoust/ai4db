@@ -739,7 +739,7 @@ def process_structure_parallel(args):
 # ============================================================================
 
 def run_stage2_pipeline_ipazia(
-    stage1_file: str = "training_datasets/stage1_enhanced_dataset.jsonl",
+    stage1_file: str = "training_datasets/stage1_cim_dataset.jsonl",
     output_file: str = "training_datasets/stage2_synthetic_dataset_ipazia.jsonl",
     num_synthetic: int = 50000,
     quality_threshold: float = 0.70,
@@ -947,7 +947,7 @@ if __name__ == "__main__":
     
     # Run pipeline
     samples, stats = run_stage2_pipeline_ipazia(
-        stage1_file="training_datasets/stage1_enhanced_dataset.jsonl",
+        stage1_file="training_datasets/stage1_cim_dataset.jsonl",
         output_file="training_datasets/stage2_synthetic_dataset_ipazia.jsonl",
         num_synthetic=num_synthetic,
         quality_threshold=0.70,

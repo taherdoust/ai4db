@@ -1,0 +1,12 @@
+{
+  "total_generated": 15000,
+  "high_quality": 15000,
+  "final_dataset": 10000,
+  "average_quality_score": 0.9127494708994709,
+  "quality_threshold": 0.7,
+  "model_type": "CTGAN",
+  "machine": "ipazia",
+  "gpu_used": true,
+  "epochs": 300,
+  "generation_date": "2025-10-22T14:21:24.519628"
+}

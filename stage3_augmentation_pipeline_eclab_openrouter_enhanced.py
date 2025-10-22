@@ -986,19 +986,27 @@ if __name__ == "__main__":
     # Parse arguments
     multiplier = 8
     model = "openai/gpt-4-turbo-preview"
+    stage2_file = "training_datasets/stage2_synthetic_dataset_eclab_ctgan.jsonl"
+    output_file = "training_datasets/stage3_augmented_dataset_eclab_openrouter_enhanced.jsonl"
     
     for i, arg in enumerate(sys.argv):
         if arg == '--multiplier' and i + 1 < len(sys.argv):
             multiplier = int(sys.argv[i + 1])
         elif arg == '--model' and i + 1 < len(sys.argv):
             model = sys.argv[i + 1]
+        elif arg == '--stage2-file' and i + 1 < len(sys.argv):
+            stage2_file = sys.argv[i + 1]
+        elif arg == '--output-file' and i + 1 < len(sys.argv):
+            output_file = sys.argv[i + 1]
     
     print(f"\n{'='*80}")
     print(f"Stage 3 Configuration (eclab with OpenRouter - ENHANCED)")
     print(f"{'='*80}")
+    print(f"  Input file: {stage2_file}")
+    print(f"  Output file: {output_file}")
     print(f"  Target multiplier: {multiplier}x")
     print(f"  OpenRouter Model: {model}")
-    print(f"  Cost: ~$10-30")
+    print(f"  Cost: ~$10-30 (for 10K samples)")
     print(f"  [NEW] ENHANCED: Generates both questions AND instructions")
     print(f"\n[INFO] API Key Setup:")
     print(f"   Option 1: export OPENROUTER_API_KEY='sk-or-v1-your-key'")
@@ -1008,8 +1016,8 @@ if __name__ == "__main__":
     
     # Run pipeline
     samples, stats = run_stage3_pipeline_eclab_openrouter_enhanced(
-        stage2_file="training_datasets/stage2_synthetic_dataset_eclab_ctgan.jsonl",
-        output_file="training_datasets/stage3_augmented_dataset_eclab_openrouter_enhanced.jsonl",
+        stage2_file=stage2_file,
+        output_file=output_file,
         target_multiplier=multiplier,
         openrouter_model=model
     )

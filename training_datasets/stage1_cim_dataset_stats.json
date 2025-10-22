@@ -1,69 +1,69 @@
 {
   "dataset_info": {
-    "total_samples": 54,
-    "evaluation_samples": 17,
-    "training_samples": 37,
-    "generation_date": "2025-10-22T15:06:57.387674"
+    "total_samples": 4050,
+    "evaluation_samples": 108,
+    "training_samples": 3942,
+    "generation_date": "2025-10-22T15:39:27.919126"
   },
   "sql_types": {
-    "MULTI_JOIN": 14,
-    "NESTED_QUERY": 12,
-    "RASTER_VECTOR": 8,
-    "SPATIAL_MEASUREMENT": 6,
-    "SIMPLE_SELECT": 6,
-    "AGGREGATION": 4,
-    "SPATIAL_JOIN": 2,
-    "SPATIAL_CLUSTERING": 2
+    "MULTI_JOIN": 1050,
+    "NESTED_QUERY": 900,
+    "RASTER_VECTOR": 600,
+    "SPATIAL_MEASUREMENT": 450,
+    "SIMPLE_SELECT": 450,
+    "AGGREGATION": 300,
+    "SPATIAL_JOIN": 150,
+    "SPATIAL_CLUSTERING": 150
   },
   "question_tones": {
-    "ANALYTICAL": 16,
-    "DIRECT": 12,
-    "AGGREGATE": 10,
-    "SPATIAL_SPECIFIC": 8,
-    "INTERROGATIVE": 4,
-    "TEMPORAL": 2,
-    "CONDITIONAL": 2
+    "ANALYTICAL": 1200,
+    "DIRECT": 900,
+    "AGGREGATE": 750,
+    "SPATIAL_SPECIFIC": 600,
+    "INTERROGATIVE": 300,
+    "TEMPORAL": 150,
+    "CONDITIONAL": 150
   },
   "difficulty_levels": {
-    "EASY": 40,
-    "MEDIUM": 14
+    "EASY": 3000,
+    "MEDIUM": 1050
   },
   "complexity_levels": {
-    "A": 18,
-    "B": 18,
-    "C": 18
+    "A": 1350,
+    "B": 1350,
+    "C": 1350
   },
   "usage_frequency": {
-    "frequent": 44,
-    "low_frequent": 10
+    "frequent": 3300,
+    "low_frequent": 750
   },
   "spatial_functions": {
-    "ST_AREA": 22,
-    "ST_INTERSECTS": 18,
-    "ST_CENTROID": 12,
-    "ST_DISTANCE": 10,
-    "ST_SUMMARYSTATS": 6,
-    "ST_SETSRID": 4,
-    "ST_MAKEPOINT": 4,
-    "ST_WITHIN": 4,
-    "ST_INTERSECTION": 4,
-    "ST_CLIP": 4,
-    "ST_X": 2,
-    "ST_Y": 2,
-    "ST_DWITHIN": 2,
-    "ST_BUFFER": 2,
-    "ST_CLUSTERDBSCAN": 2,
-    "ST_VALUE": 2,
-    "ST_TRANSITION_ADVANCED": 2,
-    "ST_UNION": 2
+    "ST_AREA": 1650,
+    "ST_INTERSECTS": 1350,
+    "ST_CENTROID": 900,
+    "ST_DISTANCE": 750,
+    "ST_SUMMARYSTATS": 450,
+    "ST_MAKEPOINT": 300,
+    "ST_SETSRID": 300,
+    "ST_WITHIN": 300,
+    "ST_INTERSECTION": 300,
+    "ST_CLIP": 300,
+    "ST_Y": 150,
+    "ST_X": 150,
+    "ST_DWITHIN": 150,
+    "ST_BUFFER": 150,
+    "ST_CLUSTERDBSCAN": 150,
+    "ST_VALUE": 150,
+    "ST_TRANSITION_ADVANCED": 150,
+    "ST_UNION": 150
   },
   "function_usage_frequency": {
-    "frequent": 104
+    "frequent": 7800
   },
   "function_data_types": {
-    "vector_only": 104
+    "vector_only": 7800
   },
   "schema_complexity": {
-    "MULTI_SCHEMA": 54
+    "MULTI_SCHEMA": 4050
   }
 }

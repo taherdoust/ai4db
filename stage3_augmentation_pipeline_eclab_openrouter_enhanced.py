@@ -59,7 +59,7 @@ try:
     from sentence_transformers import SentenceTransformer, util
     SENTENCE_TRANSFORMERS_AVAILABLE = True
 except ImportError:
-    print("⚠️  sentence-transformers not installed. Run: pip install sentence-transformers")
+    print("[WARNING] sentence-transformers not installed. Run: pip install sentence-transformers")
     SENTENCE_TRANSFORMERS_AVAILABLE = False
 
 
@@ -80,16 +80,16 @@ def get_api_key() -> Optional[str]:
     if api_key:
         # Mask the key for display
         masked_key = f"{api_key[:10]}...{api_key[-4:]}" if len(api_key) > 14 else "***"
-        print(f"✓ API key loaded from environment ({masked_key})")
+        print(f"[OK] API key loaded from environment ({masked_key})")
         return api_key
     
     # If dotenv is available, it already loaded .env file
     if DOTENV_AVAILABLE:
-        print("⚠️  API key not found. Please set OPENROUTER_API_KEY")
+        print("[WARNING] API key not found. Please set OPENROUTER_API_KEY")
         print("   Option 1: export OPENROUTER_API_KEY='your-key'")
         print("   Option 2: Create .env file (copy from .env.example)")
     else:
-        print("⚠️  API key not found. Please set OPENROUTER_API_KEY")
+        print("[WARNING] API key not found. Please set OPENROUTER_API_KEY")
         print("   Run: export OPENROUTER_API_KEY='your-key'")
     
     return None
@@ -126,7 +126,7 @@ class OpenRouterClient:
         if not self.api_key:
             return False
         
-        print(f"✓ OpenRouter available with model: {self.model}")
+        print(f"[OK] OpenRouter available with model: {self.model}")
         return True
     
     def generate(
@@ -175,19 +175,19 @@ class OpenRouterClient:
                 if 'choices' in result and len(result['choices']) > 0:
                     return result['choices'][0]['message']['content']
                 else:
-                    print(f"⚠️  Unexpected API response format: {result}")
+                    print(f"[WARNING] Unexpected API response format: {result}")
                     return ""
             else:
-                print(f"⚠️  OpenRouter API error: {response.status_code}")
+                print(f"[WARNING] OpenRouter API error: {response.status_code}")
                 print(f"   Response: {response.text}")
                 return ""
         
         except KeyError as e:
-            print(f"⚠️  API response missing key: {e}")
+            print(f"[WARNING] API response missing key: {e}")
             print(f"   Full response: {response.json() if response.status_code == 200 else response.text}")
             return ""
         except Exception as e:
-            print(f"⚠️  Generation error: {e}")
+            print(f"[WARNING] Generation error: {e}")
             return ""
 
 
@@ -456,7 +456,7 @@ Guidelines:
             return pairs[:num]
         
         except Exception as e:
-            print(f"⚠️  OpenRouter generation error: {e}")
+            print(f"[WARNING] OpenRouter generation error: {e}")
             return []
     
     def _parse_pairs(self, response: str) -> List[Tuple[str, str]]:
@@ -578,7 +578,7 @@ def deduplicate_semantic(pairs: List[Tuple[str, str]], threshold: float = 0.95) 
         
         return [pairs[i] for i in keep_indices]
     except Exception as e:
-        print(f"⚠️  Semantic deduplication error: {e}")
+        print(f"[WARNING] Semantic deduplication error: {e}")
         return list(dict.fromkeys(pairs))
 
 
@@ -999,11 +999,11 @@ if __name__ == "__main__":
     print(f"  Target multiplier: {multiplier}x")
     print(f"  OpenRouter Model: {model}")
     print(f"  Cost: ~$10-30")
-    print(f"  🆕 ENHANCED: Generates both questions AND instructions")
-    print(f"\n💡 API Key Setup:")
+    print(f"  [NEW] ENHANCED: Generates both questions AND instructions")
+    print(f"\n[INFO] API Key Setup:")
     print(f"   Option 1: export OPENROUTER_API_KEY='sk-or-v1-your-key'")
     print(f"   Option 2: Create .env file (copy from .env.example)")
-    print(f"\n🔒 Security: .env files are in .gitignore (safe for GitHub)")
+    print(f"\n[SECURITY] .env files are in .gitignore (safe for GitHub)")
     print(f"{'='*80}\n")
     
     # Run pipeline

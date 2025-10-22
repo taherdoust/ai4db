@@ -31,7 +31,7 @@ try:
     from sdv.metadata import SingleTableMetadata
     SDV_AVAILABLE = True
 except ImportError:
-    print("❌ SDV not installed. Run: pip install sdv==1.9.0")
+    print("[WARNING] SDV not installed. Run: pip install sdv==1.9.0")
     SDV_AVAILABLE = False
 
 # SQL parsing
@@ -39,7 +39,7 @@ try:
     import sqlparse
     SQLPARSE_AVAILABLE = True
 except ImportError:
-    print("❌ sqlparse not installed. Run: pip install sqlparse==0.4.4")
+    print("[WARNING] sqlparse not installed. Run: pip install sqlparse==0.4.4")
     SQLPARSE_AVAILABLE = False
 
 # GPU check
@@ -47,14 +47,15 @@ try:
     import torch
     CUDA_AVAILABLE = torch.cuda.is_available()
     if CUDA_AVAILABLE:
-        print(f"✓ CUDA available: {torch.cuda.get_device_name(0)}")
+        print(f"[OK] CUDA available: {torch.cuda.get_device_name(0)}")
     else:
-        print("⚠ CUDA not available, will use CPU (slower)")
+        print("[WARNING] CUDA not available, will use CPU (slower)")
 except ImportError:
     CUDA_AVAILABLE = False
-    print("⚠ PyTorch not installed, GPU acceleration disabled")
+    print("[WARNING] PyTorch not installed, GPU acceleration disabled")
 
-from cim_wizard_sql_generator import CIM_SCHEMAS, generate_realistic_values
+# Import from stage1_cim.py (updated schema and parameters)
+from stage1_cim import CIM_SCHEMAS, CIM_PARAMETERS, generate_realistic_values
 
 
 # ============================================================================
@@ -67,59 +68,71 @@ class CIMSchemaRules:
     Ensures synthetic SQL respects actual database schema
     """
     
-    # Valid tables from CIM Wizard database
+    # Valid tables from CIM Wizard database (from stage1_cim.py)
     VALID_TABLES = [
-        "cim_vector.project_scenario",
-        "cim_vector.building",
-        "cim_vector.building_properties",
-        "cim_vector.grid_bus",
-        "cim_vector.grid_line",
-        "cim_census.census_geo",
-        "cim_raster.dsm_raster",
+        "cim_vector.cim_wizard_project_scenario",
+        "cim_vector.cim_wizard_building",
+        "cim_vector.cim_wizard_building_properties",
+        "cim_network.network_buses",
+        "cim_network.network_lines",
+        "cim_network.network_scenarios",
+        "cim_network.scenario_buses",
+        "cim_network.scenario_lines",
+        "cim_census.censusgeo",
         "cim_raster.dtm_raster",
-        "cim_raster.building_height_cache"
+        "cim_raster.dsm_raster",
+        "cim_raster.dtm",
+        "cim_raster.dsm_sansalva"
     ]
     
     # Valid join pairs (table1, table2) based on schema relationships
     VALID_JOINS = [
-        ("cim_vector.building", "cim_vector.building_properties"),
-        ("cim_vector.building_properties", "cim_vector.building"),
-        ("cim_vector.building", "cim_census.census_geo"),
-        ("cim_census.census_geo", "cim_vector.building"),
-        ("cim_vector.building", "cim_raster.dsm_raster"),
-        ("cim_raster.dsm_raster", "cim_vector.building"),
-        ("cim_vector.building", "cim_raster.dtm_raster"),
-        ("cim_raster.dtm_raster", "cim_vector.building"),
-        ("cim_vector.building", "cim_raster.building_height_cache"),
-        ("cim_raster.building_height_cache", "cim_vector.building"),
-        ("cim_vector.building_properties", "cim_vector.grid_bus"),
-        ("cim_vector.grid_bus", "cim_vector.building_properties"),
-        ("cim_vector.grid_bus", "cim_vector.grid_line"),
-        ("cim_vector.grid_line", "cim_vector.grid_bus"),
+        ("cim_vector.cim_wizard_building", "cim_vector.cim_wizard_building_properties"),
+        ("cim_vector.cim_wizard_building_properties", "cim_vector.cim_wizard_building"),
+        ("cim_vector.cim_wizard_building_properties", "cim_vector.cim_wizard_project_scenario"),
+        ("cim_vector.cim_wizard_project_scenario", "cim_vector.cim_wizard_building_properties"),
+        ("cim_vector.cim_wizard_building", "cim_census.censusgeo"),
+        ("cim_census.censusgeo", "cim_vector.cim_wizard_building"),
+        ("cim_vector.cim_wizard_building", "cim_raster.dsm_raster"),
+        ("cim_raster.dsm_raster", "cim_vector.cim_wizard_building"),
+        ("cim_vector.cim_wizard_building", "cim_raster.dtm_raster"),
+        ("cim_raster.dtm_raster", "cim_vector.cim_wizard_building"),
+        ("cim_vector.cim_wizard_building", "cim_raster.dtm"),
+        ("cim_raster.dtm", "cim_vector.cim_wizard_building"),
+        ("cim_vector.cim_wizard_building", "cim_raster.dsm_sansalva"),
+        ("cim_raster.dsm_sansalva", "cim_vector.cim_wizard_building"),
+        ("cim_vector.cim_wizard_building_properties", "cim_network.network_buses"),
+        ("cim_network.network_buses", "cim_vector.cim_wizard_building_properties"),
+        ("cim_network.network_buses", "cim_network.network_lines"),
+        ("cim_network.network_lines", "cim_network.network_buses"),
+        ("cim_vector.cim_wizard_project_scenario", "cim_census.censusgeo"),
+        ("cim_census.censusgeo", "cim_vector.cim_wizard_project_scenario"),
     ]
     
     # Join keys for valid joins
     JOIN_KEYS = {
-        ("cim_vector.building", "cim_vector.building_properties"): ["building_id"],
-        ("cim_vector.building_properties", "cim_vector.building"): ["building_id"],
-        ("cim_vector.building_properties", "cim_vector.grid_bus"): ["project_id", "scenario_id"],
-        ("cim_vector.grid_bus", "cim_vector.building_properties"): ["project_id", "scenario_id"],
-        ("cim_vector.grid_bus", "cim_vector.grid_line"): ["project_id", "scenario_id"],
-        ("cim_vector.grid_line", "cim_vector.grid_bus"): ["project_id", "scenario_id"],
+        ("cim_vector.cim_wizard_building", "cim_vector.cim_wizard_building_properties"): ["building_id", "lod"],
+        ("cim_vector.cim_wizard_building_properties", "cim_vector.cim_wizard_building"): ["building_id", "lod"],
+        ("cim_vector.cim_wizard_building_properties", "cim_vector.cim_wizard_project_scenario"): ["project_id", "scenario_id"],
+        ("cim_vector.cim_wizard_project_scenario", "cim_vector.cim_wizard_building_properties"): ["project_id", "scenario_id"],
+        ("cim_network.network_buses", "cim_network.network_lines"): ["bus_id"],
+        ("cim_network.network_lines", "cim_network.network_buses"): ["from_bus", "to_bus"],
     }
     
     # Geometry columns for spatial operations
     GEOMETRY_COLUMNS = {
-        "cim_vector.project_scenario": ["project_boundary", "project_center"],
-        "cim_vector.building": ["building_geometry"],
-        "cim_vector.grid_bus": ["geometry"],
-        "cim_vector.grid_line": ["geometry"],
-        "cim_census.census_geo": ["geometry"],
+        "cim_vector.cim_wizard_project_scenario": ["project_boundary", "project_center", "census_boundary"],
+        "cim_vector.cim_wizard_building": ["building_geometry"],
+        "cim_network.network_buses": ["geometry"],
+        "cim_network.network_lines": ["geometry"],
+        "cim_census.censusgeo": ["geometry"],
         "cim_raster.dsm_raster": ["rast"],
         "cim_raster.dtm_raster": ["rast"],
+        "cim_raster.dtm": ["rast"],
+        "cim_raster.dsm_sansalva": ["rast"],
     }
     
-    # Spatial functions by geometry type
+    # Spatial functions by geometry type (PostGIS in public schema)
     FUNCTION_APPLICABILITY = {
         "POLYGON": [
             "ST_Area", "ST_Intersects", "ST_Contains", "ST_Within", "ST_Touches",
@@ -137,7 +150,7 @@ class CIMSchemaRules:
             "ST_LineSubstring", "ST_Simplify"
         ],
         "RASTER": [
-            "ST_Value", "ST_SummaryStats", "ST_Intersection", "ST_Intersects"
+            "ST_Value", "ST_SummaryStats", "ST_Intersection", "ST_Intersects", "ST_Clip"
         ]
     }
     
@@ -149,12 +162,15 @@ class CIMSchemaRules:
     
     # Table primary geometry types
     TABLE_GEOMETRY_TYPES = {
-        "cim_vector.building": "POLYGON",
-        "cim_vector.grid_bus": "POINT",
-        "cim_vector.grid_line": "LINESTRING",
-        "cim_census.census_geo": "POLYGON",
+        "cim_vector.cim_wizard_building": "POLYGON",
+        "cim_vector.cim_wizard_project_scenario": "POLYGON",
+        "cim_network.network_buses": "POINT",
+        "cim_network.network_lines": "LINESTRING",
+        "cim_census.censusgeo": "POLYGON",
         "cim_raster.dsm_raster": "RASTER",
         "cim_raster.dtm_raster": "RASTER",
+        "cim_raster.dtm": "RASTER",
+        "cim_raster.dsm_sansalva": "RASTER",
     }
 
 
@@ -196,14 +212,40 @@ def extract_features(stage1_samples: List[Dict]) -> pd.DataFrame:
         usage_frequency = sample['usage_frequency']
         question_tone = sample['question_tone']
         
-        # Determine primary function category
-        categories = sample['spatial_function_categories']
-        primary_category = "predicates"  # default
-        max_count = 0
-        for cat, funcs in categories.items():
-            if len(funcs) > max_count:
-                max_count = len(funcs)
-                primary_category = cat
+        # Determine primary function category from spatial_function_details
+        primary_category = "measurement"  # default
+        if 'spatial_function_details' in sample and sample['spatial_function_details']:
+            # Count categories
+            category_counts = {}
+            for func_detail in sample['spatial_function_details']:
+                func_name = func_detail['name']
+                # Categorize based on function name
+                if any(x in func_name for x in ['AREA', 'LENGTH', 'DISTANCE', 'PERIMETER']):
+                    cat = 'measurement'
+                elif any(x in func_name for x in ['INTERSECTS', 'CONTAINS', 'WITHIN', 'TOUCHES', 'OVERLAPS', 'CROSSES', 'DISJOINT', 'DWITHIN']):
+                    cat = 'predicates'
+                elif any(x in func_name for x in ['BUFFER', 'UNION', 'INTERSECTION', 'DIFFERENCE', 'CONVEXHULL', 'SIMPLIFY']):
+                    cat = 'processing'
+                elif any(x in func_name for x in ['CENTROID', 'ENVELOPE', 'STARTPOINT', 'ENDPOINT', 'X', 'Y']):
+                    cat = 'accessors'
+                elif any(x in func_name for x in ['MAKEPOINT', 'GEOMFROMTEXT', 'COLLECT']):
+                    cat = 'constructors'
+                elif any(x in func_name for x in ['TRANSFORM', 'SETSRID']):
+                    cat = 'transforms'
+                elif any(x in func_name for x in ['ISVALID', 'MAKEVALID']):
+                    cat = 'validation'
+                elif any(x in func_name for x in ['CLUSTER']):
+                    cat = 'clustering'
+                elif any(x in func_name for x in ['VALUE', 'SUMMARYSTATS', 'CLIP']):
+                    cat = 'raster'
+                else:
+                    cat = 'other'
+                
+                category_counts[cat] = category_counts.get(cat, 0) + 1
+            
+            # Get most common category
+            if category_counts:
+                primary_category = max(category_counts, key=category_counts.get)
         
         record = {
             # ID for tracking
@@ -250,9 +292,9 @@ class CTGANTrainerIPAZIA:
         self.metadata = None
         
         if self.use_gpu:
-            print(f"✓ GPU acceleration enabled: {torch.cuda.get_device_name(0)}")
+            print(f"[OK] GPU acceleration enabled: {torch.cuda.get_device_name(0)}")
         else:
-            print("⚠ GPU not available, using CPU (much slower)")
+            print("[WARNING] GPU not available, using CPU (much slower)")
     
     def create_metadata(self, df: pd.DataFrame) -> SingleTableMetadata:
         """Create SDV metadata from DataFrame"""
@@ -300,7 +342,7 @@ class CTGANTrainerIPAZIA:
         self.metadata = self.create_metadata(df)
         
         # Initialize synthesizer
-        print(f"\n✓ Initializing CTGANSynthesizer...")
+        print(f"\n[OK] Initializing CTGANSynthesizer...")
         print(f"  - Epochs: {epochs}")
         print(f"  - GPU: {self.use_gpu}")
         print(f"  - Batch size: 1000 (leveraging 256GB RAM)")
@@ -320,7 +362,7 @@ class CTGANTrainerIPAZIA:
         )
         
         # Train
-        print(f"\n✓ Training CTGAN (this will take 2-4 hours with GPU)...")
+        print(f"\n[OK] Training CTGAN (this will take 2-4 hours with GPU)...")
         start_time = datetime.now()
         
         self.synthesizer.fit(df)
@@ -328,7 +370,7 @@ class CTGANTrainerIPAZIA:
         end_time = datetime.now()
         duration = (end_time - start_time).total_seconds() / 60
         
-        print(f"\n✅ Training complete!")
+        print(f"\n[SUCCESS] Training complete!")
         print(f"   Duration: {duration:.1f} minutes ({duration/60:.1f} hours)")
         
     def generate(self, num_samples: int = 50000, batch_size: int = 10000) -> pd.DataFrame:
@@ -337,7 +379,7 @@ class CTGANTrainerIPAZIA:
         if self.synthesizer is None:
             raise ValueError("Synthesizer not trained! Call train() first.")
         
-        print(f"\n✓ Generating {num_samples} synthetic structures (in batches of {batch_size})...")
+        print(f"\n[OK] Generating {num_samples} synthetic structures (in batches of {batch_size})...")
         
         # Generate in batches for better memory management
         all_samples = []
@@ -353,7 +395,7 @@ class CTGANTrainerIPAZIA:
         # Concatenate all batches
         synthetic_df = pd.concat(all_samples, ignore_index=True)
         
-        print(f"✅ Generated {len(synthetic_df)} synthetic structures")
+        print(f"[SUCCESS] Generated {len(synthetic_df)} synthetic structures")
         
         return synthetic_df
     
@@ -361,12 +403,12 @@ class CTGANTrainerIPAZIA:
         """Save trained model"""
         if self.synthesizer:
             self.synthesizer.save(filepath)
-            print(f"✅ Model saved to {filepath}")
+            print(f"[SUCCESS] Model saved to {filepath}")
     
     def load(self, filepath: str):
         """Load trained model"""
         self.synthesizer = CTGANSynthesizer.load(filepath)
-        print(f"✅ Model loaded from {filepath}")
+        print(f"[SUCCESS] Model loaded from {filepath}")
 
 
 # ============================================================================
@@ -490,12 +532,12 @@ class SchemaAwareSQLAssembler:
             table_alias = tables[0].split('.')[-1][0]
             select_cols.append(f"{table_alias}.id")
             
-            # Add spatial function calls
+            # Add spatial function calls (with public schema prefix)
             for i, func in enumerate(functions[:3]):  # Limit to 3 for simplicity
                 if func in ['ST_Area', 'ST_Length', 'ST_Distance']:
-                    select_cols.append(f"{func}({table_alias}.geometry) AS {func.lower()}_{i}")
+                    select_cols.append(f"public.{func}({table_alias}.geometry) AS {func.lower()}_{i}")
                 elif func == 'ST_Centroid':
-                    select_cols.append(f"{func}({table_alias}.geometry) AS centroid")
+                    select_cols.append(f"public.{func}({table_alias}.geometry) AS centroid")
         
         sql_parts.append(f"SELECT {', '.join(select_cols) if select_cols else '*'}")
         sql_parts.append(f"FROM {main_table if structure['cte_count'] > 0 else tables[0]} {tables[0].split('.')[-1][0]}")
@@ -505,10 +547,10 @@ class SchemaAwareSQLAssembler:
             t2_alias = t2.split('.')[-1][0]
             t1_alias = t1.split('.')[-1][0]
             
-            # Spatial join if geometry involved
+            # Spatial join if geometry involved (with public schema prefix)
             if 'ST_Intersects' in functions or 'ST_Within' in functions:
                 spatial_pred = random.choice(['ST_Intersects', 'ST_Within'])
-                sql_parts.append(f"JOIN {t2} {t2_alias} ON {spatial_pred}({t1_alias}.geometry, {t2_alias}.geometry)")
+                sql_parts.append(f"JOIN {t2} {t2_alias} ON public.{spatial_pred}({t1_alias}.geometry, {t2_alias}.geometry)")
             else:
                 # Regular join
                 join_cond = ' AND '.join([f"{t1_alias}.{k} = {t2_alias}.{k}" for k in keys])
@@ -735,7 +777,7 @@ def run_stage2_pipeline_ipazia(
     
     # Check dependencies
     if not SDV_AVAILABLE:
-        print("\n❌ Error: SDV not installed!")
+        print("\n[ERROR] Error: SDV not installed!")
         print("   Run: pip install sdv==1.9.0")
         return None
     
@@ -745,12 +787,12 @@ def run_stage2_pipeline_ipazia(
     with open(stage1_file, 'r', encoding='utf-8') as f:
         for line in f:
             stage1_samples.append(json.loads(line))
-    print(f"      ✓ Loaded {len(stage1_samples):,} Stage 1 samples")
+    print(f"      [OK] Loaded {len(stage1_samples):,} Stage 1 samples")
     
     # Extract features
     print(f"\n[2/6] Extracting features for CTGAN training...")
     features_df = extract_features(stage1_samples)
-    print(f"      ✓ Extracted features: {features_df.shape}")
+    print(f"      [OK] Extracted features: {features_df.shape}")
     print(f"      Features: {list(features_df.columns)}")
     
     # Train CTGAN
@@ -766,7 +808,7 @@ def run_stage2_pipeline_ipazia(
     print(f"\n[4/6] Generating synthetic structures...")
     generation_target = int(num_synthetic * 1.5)
     synthetic_structures = trainer.generate(num_samples=generation_target, batch_size=10000)
-    print(f"      ✓ Generated {len(synthetic_structures):,} synthetic structures")
+    print(f"      [OK] Generated {len(synthetic_structures):,} synthetic structures")
     
     # Assemble SQL from structures
     print(f"\n[5/6] Assembling SQL queries with schema enforcement...")
@@ -844,7 +886,7 @@ def run_stage2_pipeline_ipazia(
             if (i + 1) % 5000 == 0:
                 print(f"      Progress: {i + 1:,}/{len(synthetic_structures):,} structures processed...")
     
-    print(f"      ✓ Assembled {len(synthetic_samples):,} SQL queries")
+    print(f"      [OK] Assembled {len(synthetic_samples):,} SQL queries")
     
     # Quality filtering
     print(f"\n[6/6] Filtering by quality (threshold: {quality_threshold})...")
@@ -853,12 +895,12 @@ def run_stage2_pipeline_ipazia(
     # Take target number
     final_samples = high_quality[:num_synthetic]
     
-    print(f"      ✓ High quality samples: {len(high_quality):,}")
-    print(f"      ✓ Final dataset: {len(final_samples):,} samples")
-    print(f"      ✓ Average quality score: {np.mean(quality_scores):.3f}")
+    print(f"      [OK] High quality samples: {len(high_quality):,}")
+    print(f"      [OK] Final dataset: {len(final_samples):,} samples")
+    print(f"      [OK] Average quality score: {np.mean(quality_scores):.3f}")
     
     # Save dataset
-    print(f"\n✓ Saving Stage 2 dataset to {output_file}...")
+    print(f"\n[OK] Saving Stage 2 dataset to {output_file}...")
     with open(output_file, 'w', encoding='utf-8') as f:
         for sample in final_samples:
             f.write(json.dumps(sample, ensure_ascii=False) + '\n')
@@ -881,7 +923,7 @@ def run_stage2_pipeline_ipazia(
     with open(stats_file, 'w', encoding='utf-8') as f:
         json.dump(stats, f, indent=2)
     
-    print(f"\n✅ Stage 2 Complete (ipazia)!")
+    print(f"\n[SUCCESS] Stage 2 Complete (ipazia)!")
     print(f"   Output: {output_file}")
     print(f"   Statistics: {stats_file}")
     print(f"   Model: {model_file}")

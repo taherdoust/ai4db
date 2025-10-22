@@ -859,7 +859,7 @@ WHERE bp.project_id = '{project_id}'
   AND public.ST_Area(b.building_geometry) > {min_area}
 LIMIT {limit};
         """.strip(),
-        "Find buildings of specific type with area above threshold in a project scenario",
+        "Find {building_type} buildings with area greater than {min_area} square meters in project {project_id} scenario {scenario_id}, limit to {limit} results",
         {"building", "area_filter", "type_filter", "basic"}
     ))
     
@@ -872,7 +872,7 @@ FROM cim_vector.cim_wizard_project_scenario ps
 WHERE public.ST_Intersects(ps.project_boundary, public.ST_SetSRID(public.ST_MakePoint({lon}, {lat}), {srid}))
 LIMIT {limit};
         """.strip(),
-        "Find project scenarios that contain a specific geographic point",
+        "Find project scenarios that contain the geographic point at longitude {lon} latitude {lat} with SRID {srid}, limit to {limit} results",
         {"project", "point_in_polygon", "basic"}
     ))
     
@@ -886,7 +886,7 @@ WHERE gb.voltage_kv >= {voltage_kv}
   AND gb.in_service = true
 LIMIT {limit};
         """.strip(),
-        "Find active grid buses above certain voltage level",
+        "Find active grid buses with voltage at or above {voltage_kv} kV, limit to {limit} results",
         {"grid", "voltage_filter", "basic"}
     ))
     
@@ -904,7 +904,7 @@ WHERE c.REGIONE = '{region}'
 ORDER BY c.P1 DESC
 LIMIT {limit};
         """.strip(),
-        "Analyze population distribution by gender in census areas for a specific region",
+        "Analyze population distribution by gender in census areas for region {region} with minimum population of {min_population}, ordered by total population descending, limit to {limit} results",
         {"census", "demographics", "basic"}
     ))
     
@@ -920,7 +920,7 @@ WHERE bp.project_id = '{project_id}'
 ORDER BY bp.height DESC
 LIMIT {limit};
         """.strip(),
-        "Retrieve building heights from properties for a project scenario",
+        "Retrieve building heights of at least {min_height} meters from properties for project {project_id} scenario {scenario_id}, ordered by height descending, limit to {limit} results",
         {"building", "height", "properties", "basic"}
     ))
     
@@ -937,7 +937,7 @@ WHERE bp.project_id = '{project_id}'
 ORDER BY distance_m ASC
 LIMIT {limit};
         """.strip(),
-        "Calculate distance from buildings to a specific point location",
+        "Calculate distance from buildings in project {project_id} scenario {scenario_id} to the point at longitude {lon} latitude {lat} with SRID {srid}, ordered by distance ascending, limit to {limit} results",
         {"building", "distance", "measurement", "basic"}
     ))
     
@@ -954,7 +954,7 @@ WHERE ps.project_id = '{project_id}'
   AND public.ST_Intersects(b.building_geometry, ps.project_boundary)
 LIMIT {limit};
         """.strip(),
-        "Find buildings that intersect with a project boundary",
+        "Find buildings that intersect with the boundary of project {project_id} scenario {scenario_id}, limit to {limit} results",
         {"building", "project", "spatial_predicate", "basic"}
     ))
     
@@ -973,7 +973,7 @@ WHERE bp.project_id = '{project_id}'
   AND c.REGIONE = '{region}'
 LIMIT {limit};
         """.strip(),
-        "Find buildings within a specific census zone by region",
+        "Find buildings within census zones in region {region} for project {project_id} scenario {scenario_id}, limit to {limit} results",
         {"building", "census", "spatial_predicate", "basic"}
     ))
     
@@ -991,7 +991,7 @@ WHERE ps.project_id = '{project_id}'
 ORDER BY c.P1 DESC
 LIMIT {limit};
         """.strip(),
-        "Find census zones that intersect with a project boundary",
+        "Find census zones that intersect with project {project_id} scenario {scenario_id} boundary, ordered by total population descending, limit to {limit} results",
         {"census", "project", "spatial_predicate", "basic"}
     ))
     
@@ -1013,7 +1013,7 @@ WHERE bp.project_id = '{project_id}'
 GROUP BY bp.type
 ORDER BY building_count DESC;
         """.strip(),
-        "Calculate building statistics grouped by type for a project scenario",
+        "Calculate building statistics (count, average height, average area, total population) grouped by type for project {project_id} scenario {scenario_id}, ordered by building count descending",
         {"building", "aggregation", "statistics", "grouping"}
     ))
     
@@ -1037,7 +1037,7 @@ WHERE bp.project_id = '{project_id}'
 ORDER BY distance_to_grid_m ASC
 LIMIT {limit};
         """.strip(),
-        "Find buildings closest to high-voltage grid infrastructure within specified distance",
+        "Find buildings in project {project_id} scenario {scenario_id} within {max_distance} meters of active grid buses with voltage at or above {voltage_kv} kV, ordered by distance ascending, limit to {limit} results",
         {"building", "grid", "distance", "proximity", "spatial_join"}
     ))
     
@@ -1058,7 +1058,7 @@ GROUP BY cg.COMUNE
 ORDER BY total_population DESC
 LIMIT {limit};
         """.strip(),
-        "Aggregate building data by census municipality boundaries using spatial containment",
+        "Aggregate building data (count, total population, average area) by census municipality for project {project_id} scenario {scenario_id}, ordered by total population descending, limit to {limit} results",
         {"building", "census", "aggregation", "spatial_join"}
     ))
     
@@ -1079,7 +1079,7 @@ WHERE gl.in_service = true
 ORDER BY gl.length_km DESC
 LIMIT {limit};
         """.strip(),
-        "Analyze electrical grid line connectivity between bus stations",
+        "Analyze electrical grid line connectivity between active bus stations, ordered by line length descending, limit to {limit} results",
         {"grid", "network", "connectivity", "multi_join"}
     ))
     
@@ -1100,7 +1100,7 @@ FROM buffered_buildings
 ORDER BY buffer_area_sqm DESC
 LIMIT {limit};
         """.strip(),
-        "Create buffers around buildings and calculate buffer areas",
+        "Create {buffer_distance} meter buffers around buildings in project {project_id} scenario {scenario_id} and calculate buffer areas, ordered by area descending, limit to {limit} results",
         {"building", "buffer", "processing", "cte"}
     ))
     
@@ -1118,7 +1118,7 @@ WHERE c.REGIONE = '{region}'
 GROUP BY c.PROVINCIA
 ORDER BY avg_unemployment_rate DESC;
         """.strip(),
-        "Analyze employment and unemployment rates by province",
+        "Analyze employment and unemployment rates by province in region {region}, grouped by province and ordered by average unemployment rate descending",
         {"census", "employment", "aggregation", "statistics"}
     ))
     
@@ -1141,7 +1141,7 @@ WHERE bp1.project_id = '{project_id}'
 ORDER BY distance_m ASC
 LIMIT 10;
         """.strip(),
-        "Find 10 nearest buildings to a specific building using centroid distance within threshold",
+        "Find 10 nearest buildings to building {census_id} within {max_distance} meters in project {project_id} scenario {scenario_id}, using centroid distance and ordered by distance ascending",
         {"building", "distance", "nearest_neighbor", "proximity"}
     ))
     
@@ -1163,7 +1163,7 @@ WHERE b.building_id = '{census_id}'
 ORDER BY distance_m ASC
 LIMIT 1;
         """.strip(),
-        "Find the closest grid bus to a specific building by centroid distance",
+        "Find the closest active grid bus to building {census_id} in project {project_id} scenario {scenario_id} by centroid distance",
         {"building", "grid", "nearest_neighbor", "distance"}
     ))
     
@@ -1183,7 +1183,7 @@ SELECT
     COUNT(*) as tile_count
 FROM cim_raster.dsm_sansalva;
         """.strip(),
-        "Calculate average elevation values from DTM and DSM rasters",
+        "Calculate average elevation values and tile counts from DTM and DSM rasters",
         {"raster", "elevation", "statistics", "analysis"}
     ))
     
@@ -1226,7 +1226,7 @@ SELECT type, height_category, building_count,
 FROM type_analysis
 ORDER BY building_count DESC;
         """.strip(),
-        "Analyze building type distribution and height categories for urban planning",
+        "Analyze building type distribution and height categories (high_rise > 20m, mid_rise > 10m, low_rise <= 10m) for project {project_id} scenario {scenario_id}, showing count, average height, average footprint, and total residents, ordered by building count descending",
         {"building", "type_analysis", "height_analysis", "advanced", "cte"}
     ))
     
@@ -1256,7 +1256,7 @@ FROM cluster_stats
 ORDER BY total_residents DESC
 LIMIT {limit};
         """.strip(),
-        "Perform DBSCAN spatial clustering on buildings by type",
+        "Perform DBSCAN spatial clustering on buildings by type in project {project_id} scenario {scenario_id} with epsilon {cluster_distance} meters and minimum {min_points} points, showing clusters with at least {min_cluster_size} buildings, ordered by total residents descending, limit to {limit} results",
         {"building", "clustering", "advanced", "cte", "window_function"}
     ))
     
@@ -1292,7 +1292,7 @@ GROUP BY REGIONE, type
 HAVING COUNT(*) >= {min_buildings}
 ORDER BY building_count DESC;
         """.strip(),
-        "Comprehensive multi-schema analysis integrating buildings, census, and grid data",
+        "Comprehensive multi-schema analysis integrating buildings from project {project_id} scenario {scenario_id} with census data (requiring > 50% overlap) and grid infrastructure, grouped by region and type, showing only groups with at least {min_buildings} buildings, ordered by building count descending",
         {"building", "census", "grid", "multi_schema", "advanced", "cte", "spatial_join"}
     ))
     
@@ -1315,7 +1315,7 @@ WHERE bp.project_id = '{project_id}'
   AND bp.type = '{building_type}'
 LIMIT {limit};
         """.strip(),
-        "Extract raster elevation values at building centroid locations",
+        "Extract DTM and DSM raster elevation values at centroids of {building_type} buildings in project {project_id} scenario {scenario_id}, limit to {limit} results",
         {"building", "raster", "raster_vector", "advanced", "multi_join"}
     ))
     
@@ -1354,7 +1354,7 @@ GROUP BY demographic_stage, PROVINCIA
 HAVING COUNT(*) >= {min_areas}
 ORDER BY avg_aging_ratio DESC;
         """.strip(),
-        "Comprehensive demographic transition analysis combining aging and modernization indicators",
+        "Comprehensive demographic transition analysis for region {region} with minimum population {min_population}, classifying areas by aging ratio (elderly/youth) and education modernization (university graduates percentage), grouped by demographic stage and province, showing only groups with at least {min_areas} areas, ordered by aging ratio descending",
         {"census", "demographics", "advanced", "cte", "statistical_analysis"}
     ))
     
@@ -1377,7 +1377,7 @@ SELECT project_id, scenario_id, project_name,
 FROM project_census
 GROUP BY project_id, scenario_id, project_name;
         """.strip(),
-        "Merge all census zones intersecting with project to create unified census boundary",
+        "Merge all census zones intersecting with project {project_id} scenario {scenario_id} boundary to create unified census boundary, showing count of zones and total area",
         {"census", "project", "union", "aggregation", "advanced", "cte"}
     ))
     
@@ -1412,7 +1412,7 @@ FROM overlap_percentages
 WHERE overlap_percentage >= {overlap_threshold}
 ORDER BY overlap_percentage DESC;
         """.strip(),
-        "Find projects covering same land with more than specified percentage overlap",
+        "Find project pairs with land coverage overlap of at least {overlap_threshold} percent, showing overlap area and percentage, ordered by overlap percentage descending",
         {"project", "overlap", "intersection", "percentage", "advanced", "cte"}
     ))
     
@@ -1436,7 +1436,7 @@ FROM building_geom bg
 JOIN cim_raster.dtm dtm ON public.ST_Intersects(dtm.rast, bg.building_geometry)
 LIMIT 1;
         """.strip(),
-        "Clip DTM raster by building footprint and extract elevation statistics",
+        "Clip DTM raster by footprint of building {census_id} in project {project_id} scenario {scenario_id} and extract average ground elevation statistics",
         {"building", "raster", "clip", "processing", "advanced", "cte"}
     ))
     
@@ -1471,7 +1471,7 @@ SELECT building_id,
        ROUND(ABS(declared_height - (avg_surface_elevation - avg_ground_elevation)), 2) as height_difference_m
 FROM raster_values;
         """.strip(),
-        "Calculate building height from DSM and DTM raster difference and compare with declared height",
+        "Calculate building height from DSM and DTM raster difference for building {census_id} in project {project_id} scenario {scenario_id}, comparing calculated height (DSM - DTM) with declared height and showing the difference",
         {"building", "raster", "clip", "height_calculation", "advanced", "cte", "multi_raster"}
     ))
     
@@ -1731,12 +1731,12 @@ def generate_stage1_cim_dataset(
             values = generate_realistic_values()
             
             try:
-                # Apply parameter substitution
+                # Apply parameter substitution to SQL
                 postgis_sql = sql_template.format(**values)
                 spatialite_sql = postgis_sql  # For now, same as PostGIS
                 
-                # Create natural language with specific values
-                enhanced_desc = f"{nl_desc} (Project: {values['project_id']}, Scenario: {values['scenario_id']})"
+                # Apply parameter substitution to natural language description
+                enhanced_desc = nl_desc.format(**values)
                 
                 # Extract evidence
                 evidence = extract_evidence(postgis_sql, f"{template_id}_var_{i+1}", tags)

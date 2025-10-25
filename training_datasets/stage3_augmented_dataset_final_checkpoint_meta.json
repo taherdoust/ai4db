@@ -1,0 +1,13 @@
+{
+  "last_processed_idx": 4999,
+  "total_augmented_samples": 19313,
+  "timestamp": "2025-10-23T08:31:13.278335",
+  "stage2_file": "training_datasets/stage2_synthetic_dataset_ipazia.jsonl",
+  "target_multiplier": 8,
+  "api_call_count": 1000,
+  "api_success_count": 1000,
+  "api_fail_count": 0,
+  "rejected_complex_count": 0,
+  "rejected_quality_count": 182,
+  "elapsed_time_seconds": 58372.45211148262
+}

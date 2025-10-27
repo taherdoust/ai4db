@@ -35,9 +35,9 @@ CIM_SCHEMAS = {
             "srid": 4326
         },
         "cim_wizard_building_properties": {
-            "columns": ["scenario_id", "building_id", "project_id", "lod", "height", "area", "volume", "number_of_floors", "type", "const_year", "n_people", "n_family", "gross_floor_area", "heating", "cooling", "hvac_type"],
-            "numeric_columns": ["height", "area", "volume", "number_of_floors", "const_year", "n_people", "n_family", "gross_floor_area"],
-            "categorical_columns": ["type", "hvac_type"]
+            "columns": ["scenario_id", "building_id", "project_id", "lod", "height", "area", "volume", "number_of_floors", "const_period_census", "n_family", "n_people", "type", "const_tabula", "const_year"],
+            "numeric_columns": ["height", "area", "volume", "number_of_floors", "const_year", "n_people", "n_family"],
+            "categorical_columns": ["type", "const_period_census", "const_tabula"]
         }
     },
     "cim_census": {
@@ -51,15 +51,15 @@ CIM_SCHEMAS = {
     },
     "cim_network": {
         "network_buses": {
-            "columns": ["bus_id", "bus_type", "geometry", "name", "voltage_kv", "in_service"],
+            "columns": ["bus_id", "bus_name", "bus_type", "voltage_kv", "geometry", "zone", "in_service", "min_vm_pu", "max_vm_pu", "additional_data"],
             "geometry_columns": ["geometry"],
-            "numeric_columns": ["voltage_kv"],
+            "numeric_columns": ["voltage_kv", "min_vm_pu", "max_vm_pu"],
             "srid": 4326
         },
         "network_lines": {
-            "columns": ["line_id", "geometry", "name", "from_bus", "to_bus", "length_km", "in_service"],
+            "columns": ["line_id", "line_name", "from_bus_id", "to_bus_id", "geometry", "length_km", "r_ohm_per_km", "x_ohm_per_km", "in_service"],
             "geometry_columns": ["geometry"],
-            "numeric_columns": ["length_km"],
+            "numeric_columns": ["length_km", "r_ohm_per_km", "x_ohm_per_km"],
             "srid": 4326
         },
         "network_scenarios": {
@@ -441,9 +441,6 @@ CIM_PARAMETERS = {
     # Real building types from database
     "building_types": ["residential", "non-residential"],
     
-    # HVAC types (not in current schema, using defaults for future use)
-    "hvac_types": ["heat_pump", "gas_boiler", "district_heating", "electric", "hybrid"],
-    
     # Census data (columns exist but are empty in current database, using defaults)
     "regions": ["Lombardia", "Emilia-Romagna", "Lazio", "Piemonte", "Toscana"],
     "provinces": ["Milano", "Bologna", "Roma", "Torino", "Firenze"],
@@ -531,7 +528,6 @@ def generate_realistic_values() -> Dict[str, any]:
         "census_id": random.choice(CIM_PARAMETERS["building_ids"]),  # Use building_id for census_id placeholder
         
         # Network and infrastructure
-        "hvac_type": random.choice(CIM_PARAMETERS["hvac_types"]),
         "voltage_kv": random.choice(CIM_PARAMETERS["voltage_levels"]),
         
         # Geographic and administrative
@@ -839,11 +835,22 @@ def extract_evidence(sql: str, template_id: str, tags: Set[str]) -> Dict[str, an
 
 def generate_cim_templates() -> List[Tuple[str, str, str, Set[str]]]:
     """
-    Generate CIM Wizard templates
+    Generate CIM Wizard templates with priority-based organization
+    
+    Template Priority System:
+    - Priority 1: Inner cim_vector schema (buildings, properties, projects)
+    - Priority 2: Cross-schema (cim_vector + cim_census/cim_network/cim_raster)
+    - Priority 3: Inner cim_census/cim_raster/cim_network
+    - Priority 4: Cross-schema (cim_raster/cim_network/cim_census without cim_vector)
+    
     Returns: List of (template_id, sql, natural_language, tags)
     """
     templates = []
     
+    # ==========================================================================
+    # PRIORITY 1: INNER CIM_VECTOR SCHEMA (HIGHEST PRIORITY)
+    # Focus on core building, properties, and project queries
+    # ==========================================================================
     # ========== COMPLEXITY A: BASIC OPERATIONS ==========
     
     # A1: Simple building selection by type and area
@@ -876,11 +883,16 @@ LIMIT {limit};
         {"project", "point_in_polygon", "basic"}
     ))
     
+    # ==========================================================================
+    # PRIORITY 3: INNER CIM_CENSUS/CIM_NETWORK/CIM_RASTER
+    # Queries within non-vector schemas
+    # ==========================================================================
+    
     # A3: Grid buses by voltage
     templates.append((
         "CIM_A3_grid_buses_by_voltage",
         """
-SELECT gb.bus_id, gb.name, gb.voltage_kv, public.ST_X(gb.geometry) as lon, public.ST_Y(gb.geometry) as lat
+SELECT gb.bus_id, gb.bus_name, gb.voltage_kv, public.ST_X(gb.geometry) as lon, public.ST_Y(gb.geometry) as lat
 FROM cim_network.network_buses gb
 WHERE gb.voltage_kv >= {voltage_kv}
   AND gb.in_service = true
@@ -907,6 +919,10 @@ LIMIT {limit};
         "Analyze population distribution by gender in census areas for region {region} with minimum population of {min_population}, ordered by total population descending, limit to {limit} results",
         {"census", "demographics", "basic"}
     ))
+    
+    # ==========================================================================
+    # BACK TO PRIORITY 1: INNER CIM_VECTOR SCHEMA
+    # ==========================================================================
     
     # A5: Building height from properties
     templates.append((
@@ -957,6 +973,11 @@ LIMIT {limit};
         "Find buildings that intersect with the boundary of project {project_id} scenario {scenario_id}, limit to {limit} results",
         {"building", "project", "spatial_predicate", "basic"}
     ))
+    
+    # ==========================================================================
+    # PRIORITY 2: CROSS-SCHEMA WITH CIM_VECTOR
+    # Queries combining cim_vector with census/network/raster
+    # ==========================================================================
     
     # A8: Buildings inside census zone
     templates.append((
@@ -1066,13 +1087,13 @@ LIMIT {limit};
     templates.append((
         "CIM_B4_grid_line_connectivity",
         """
-SELECT gl.line_id, gl.name, gl.length_km,
-       gb1.name as from_bus_name,
-       gb2.name as to_bus_name,
+SELECT gl.line_id, gl.line_name, gl.length_km,
+       gb1.bus_name as from_bus_name,
+       gb2.bus_name as to_bus_name,
        gb1.voltage_kv
 FROM cim_network.network_lines gl
-JOIN cim_network.network_buses gb1 ON gl.from_bus = gb1.bus_id
-JOIN cim_network.network_buses gb2 ON gl.to_bus = gb2.bus_id
+JOIN cim_network.network_buses gb1 ON gl.from_bus_id = gb1.bus_id
+JOIN cim_network.network_buses gb2 ON gl.to_bus_id = gb2.bus_id
 WHERE gl.in_service = true
   AND gb1.in_service = true
   AND gb2.in_service = true

@@ -1,0 +1,4 @@
+Traceback (most recent call last):
+  File "/mnt/HDD_Data/000products/coesi/ai4db/evaluate_generation_quality.py", line 64, in <module>
+    from sqlalchemy import create_engine, text
+ModuleNotFoundError: No module named 'sqlalchemy'

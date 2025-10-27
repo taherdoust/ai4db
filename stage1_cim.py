@@ -535,10 +535,10 @@ def generate_realistic_values() -> Dict[str, any]:
         
         # Network and infrastructure
         "voltage_kv": random.choice(CIM_PARAMETERS["voltage_levels"]),
+        "bus_id": random.choice(CIM_PARAMETERS["bus_ids"]),
+        "census_zone": random.choice(CIM_PARAMETERS["census_zones"]),
         
         # Geographic and administrative
-        "region": random.choice(CIM_PARAMETERS["regions"]),
-        "province": random.choice(CIM_PARAMETERS["provinces"]),
         "srid": random.choice(CIM_PARAMETERS["srids"]),
         
         # Spatial analysis parameters
@@ -971,7 +971,7 @@ LIMIT {limit};
         "CIM_A6_building_distance",
         """
 SELECT b.building_id, 
-       public.ST_Distance(b.building_geometry, public.ST_SetSRID(public.ST_MakePoint({lon}, {lat}), {srid})) as distance_m
+       public.ST_Distance(b.building_geometry, public.ST_SetSRID(public.ST_MakePoint({lon}, {lat}), 4326)) as distance_m
 FROM cim_vector.cim_wizard_building b
 JOIN cim_vector.cim_wizard_building_properties bp ON b.building_id = bp.building_id AND b.lod = bp.lod
 WHERE bp.project_id = '{project_id}' 
@@ -979,7 +979,7 @@ WHERE bp.project_id = '{project_id}'
 ORDER BY distance_m ASC
 LIMIT {limit};
         """.strip(),
-        "Calculate distance from buildings in project {project_id} scenario {scenario_id} to the point at longitude {lon} latitude {lat} with SRID {srid}, ordered by distance ascending, limit to {limit} results",
+        "Calculate distance from buildings in project {project_id} scenario {scenario_id} to the point at longitude {lon} latitude {lat} in SRID 4326, ordered by distance ascending, limit to {limit} results",
         {"building", "distance", "measurement", "basic"}
     ))
     
@@ -1210,14 +1210,14 @@ LIMIT {limit};
     templates.append((
         "CIM_A9_census_in_project",
         """
-SELECT c.SEZ2011, c.REGIONE, c.PROVINCIA, c.COMUNE,
-       c.P1 as total_population,
+SELECT c."SEZ2011",
+       c."P1" as total_population,
        public.ST_Area(c.geometry) as census_area_sqm
 FROM cim_census.censusgeo c
 JOIN cim_vector.cim_wizard_project_scenario ps ON public.ST_Intersects(c.geometry, ps.project_boundary)
 WHERE ps.project_id = '{project_id}'
   AND ps.scenario_id = '{scenario_id}'
-ORDER BY c.P1 DESC
+ORDER BY c."P1" DESC
 LIMIT {limit};
         """.strip(),
         "Find census zones that intersect with project {project_id} scenario {scenario_id} boundary, ordered by total population descending, limit to {limit} results",
@@ -1491,7 +1491,7 @@ LIMIT {limit};
         """
 WITH building_census_overlay AS (
   SELECT b.building_id, bp.type, bp.height, bp.area, bp.n_people,
-         c.SEZ2011, c.P1 as census_population, c.REGIONE, c.PROVINCIA,
+         c."SEZ2011", c."P1" as census_population,
          public.ST_Area(public.ST_Intersection(b.building_geometry, c.geometry)) / public.ST_Area(b.building_geometry) as overlap_ratio
   FROM cim_vector.cim_wizard_building b
   JOIN cim_vector.cim_wizard_building_properties bp ON b.building_id = bp.building_id AND b.lod = bp.lod
@@ -1500,24 +1500,24 @@ WITH building_census_overlay AS (
     AND public.ST_Area(public.ST_Intersection(b.building_geometry, c.geometry)) / public.ST_Area(b.building_geometry) > 0.5
 ),
 grid_proximity AS (
-  SELECT bco.building_id, bco.type, bco.height, bco.REGIONE,
+  SELECT bco.building_id, bco.type, bco.height,
          MIN(public.ST_Distance(b.building_geometry, gb.geometry)) as min_grid_distance
   FROM building_census_overlay bco
   JOIN cim_vector.cim_wizard_building b ON bco.building_id = b.building_id
   CROSS JOIN cim_network.network_buses gb
   WHERE gb.in_service = true
-  GROUP BY bco.building_id, bco.type, bco.height, bco.REGIONE
+  GROUP BY bco.building_id, bco.type, bco.height
 )
-SELECT REGIONE, type,
+SELECT type,
        COUNT(*) as building_count,
        AVG(height) as avg_height,
        AVG(min_grid_distance) as avg_grid_distance
 FROM grid_proximity
-GROUP BY REGIONE, type
+GROUP BY type
 HAVING COUNT(*) >= {min_buildings}
 ORDER BY building_count DESC;
         """.strip(),
-        "Comprehensive multi-schema analysis integrating buildings from project {project_id} scenario {scenario_id} with census data (requiring > 50% overlap) and grid infrastructure, grouped by region and type, showing only groups with at least {min_buildings} buildings, ordered by building count descending",
+        "Comprehensive multi-schema analysis integrating buildings from project {project_id} scenario {scenario_id} with census data (requiring > 50% overlap) and grid infrastructure, grouped by building type, showing only groups with at least {min_buildings} buildings, ordered by building count descending",
         {"building", "census", "grid", "multi_schema", "advanced", "cte", "spatial_join"}
     ))
     
@@ -1589,14 +1589,14 @@ ORDER BY avg_aging_ratio DESC;
         """
 WITH project_census AS (
   SELECT ps.project_id, ps.scenario_id, ps.project_name,
-         c.SEZ2011, c.REGIONE, c.geometry
+         c."SEZ2011", c.geometry
   FROM cim_vector.cim_wizard_project_scenario ps
   JOIN cim_census.censusgeo c ON public.ST_Intersects(ps.project_boundary, c.geometry)
   WHERE ps.project_id = '{project_id}'
     AND ps.scenario_id = '{scenario_id}'
 )
 SELECT project_id, scenario_id, project_name,
-       COUNT(DISTINCT SEZ2011) as census_zones_count,
+       COUNT(DISTINCT "SEZ2011") as census_zones_count,
        public.ST_Union(geometry) as merged_census_boundary,
        public.ST_Area(public.ST_Union(geometry)) as total_area_sqm
 FROM project_census

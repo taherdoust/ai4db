@@ -1,55 +1,61 @@
 {
   "dataset_info": {
-    "total_samples": 5400,
+    "total_samples": 7600,
     "evaluation_samples": 100,
-    "training_samples": 5300,
-    "generation_date": "2025-10-27T17:27:33.198922"
+    "training_samples": 7500,
+    "generation_date": "2025-10-27T18:15:43.640972"
+  },
+  "priority_distribution": {
+    "Priority_1": 4200,
+    "Priority_3": 1200,
+    "Priority_2": 2200
   },
   "sql_types": {
+    "SIMPLE_SELECT": 2200,
     "MULTI_JOIN": 1400,
     "NESTED_QUERY": 1200,
+    "SPATIAL_MEASUREMENT": 800,
+    "AGGREGATION": 800,
     "RASTER_VECTOR": 800,
-    "SPATIAL_MEASUREMENT": 600,
-    "SIMPLE_SELECT": 600,
-    "AGGREGATION": 400,
     "SPATIAL_JOIN": 200,
     "SPATIAL_CLUSTERING": 200
   },
   "question_tones": {
-    "ANALYTICAL": 1600,
-    "DIRECT": 1200,
-    "AGGREGATE": 1000,
+    "ANALYTICAL": 2200,
+    "DIRECT": 2000,
+    "AGGREGATE": 1600,
     "SPATIAL_SPECIFIC": 800,
     "INTERROGATIVE": 400,
-    "TEMPORAL": 200,
+    "TEMPORAL": 400,
     "CONDITIONAL": 200
   },
   "difficulty_levels": {
-    "EASY": 4000,
+    "EASY": 6200,
     "MEDIUM": 1400
   },
   "complexity_levels": {
-    "A": 1800,
+    "A": 4000,
     "B": 1800,
     "C": 1800
   },
   "usage_frequency": {
-    "frequent": 4400,
-    "low_frequent": 1000
+    "frequent": 4800,
+    "low_frequent": 2800
   },
   "spatial_functions": {
-    "ST_AREA": 2200,
+    "ST_AREA": 2400,
     "ST_INTERSECTS": 1800,
     "ST_CENTROID": 1200,
     "ST_DISTANCE": 1000,
     "ST_SUMMARYSTATS": 600,
-    "ST_SETSRID": 400,
     "ST_MAKEPOINT": 400,
+    "ST_SETSRID": 400,
     "ST_WITHIN": 400,
     "ST_INTERSECTION": 400,
     "ST_CLIP": 400,
     "ST_X": 200,
     "ST_Y": 200,
+    "ST_YEAR": 200,
     "ST_DWITHIN": 200,
     "ST_BUFFER": 200,
     "ST_CLUSTERDBSCAN": 200,
@@ -58,12 +64,13 @@
     "ST_UNION": 200
   },
   "function_usage_frequency": {
-    "frequent": 10400
+    "frequent": 10800
   },
   "function_data_types": {
-    "vector_only": 10400
+    "vector_only": 10800
   },
   "schema_complexity": {
-    "MULTI_SCHEMA": 5400
+    "MULTI_SCHEMA": 7200,
+    "SINGLE_TABLE": 400
   }
 }

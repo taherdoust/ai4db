@@ -441,12 +441,18 @@ CIM_PARAMETERS = {
     # Real building types from database
     "building_types": ["residential", "non-residential"],
     
-    # Census data (columns exist but are empty in current database, using defaults)
-    "regions": ["Lombardia", "Emilia-Romagna", "Lazio", "Piemonte", "Toscana"],
-    "provinces": ["Milano", "Bologna", "Roma", "Torino", "Firenze"],
-    
-    # Real voltage levels from network_buses
+    # Real voltage levels from network_buses (actual values from database)
     "voltage_levels": [0.4, 20.0, 132.0, 400.0],
+    
+    # Real network bus IDs (sample from actual database)
+    "bus_ids": ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15"],
+    
+    # Real census zone IDs (actual SEZ2011 values with population > 0)
+    "census_zones": [
+        "10180000029", "10180000018", "10240000037", "11710000046", "11830000022",
+        "10900000379", "12720001707", "12720000215", "12720001637", "12720001763",
+        "12720001821", "12720001884", "12720001946", "12720002002", "12720002064"
+    ],
     
     # Standard SRIDs
     "srids": [4326, 3857, 32632, 32633],
@@ -833,6 +839,29 @@ def extract_evidence(sql: str, template_id: str, tags: Set[str]) -> Dict[str, an
 # CIM WIZARD TEMPLATES
 # ============================================================================
 
+def infer_template_priority(template_id: str, tags: Set[str]) -> int:
+    """
+    Infer priority from template_id and tags.
+    Priority 1: Inner cim_vector (A1, A2, A5-A7, A10-A20, B1, B5, B7, C1, C2)
+    Priority 2: Cross-schema with cim_vector (A8-A9, B2-B3, B8-B9, C3-C4, C6, C8-C9)
+    Priority 3: Inner census/network/raster (A3-A4, B4, B6, B9, C5, C7)
+    """
+    template_num = template_id.split('_')[1] if '_' in template_id else ""
+    
+    # Priority 1: A1, A2, A5-A7, A10-A20, B1, B5, B7, C1, C2
+    priority_1_templates = ['A1', 'A2', 'A5', 'A6', 'A7', 'A10', 'A11', 'A12', 'A13', 'A14', 
+                           'A15', 'A16', 'A17', 'A18', 'A19', 'A20', 'B1', 'B5', 'B7', 'C1', 'C2']
+    
+    # Priority 3: A3, A4, B4, B6, C5, C7
+    priority_3_templates = ['A3', 'A4', 'B4', 'B6', 'C5', 'C7']
+    
+    if template_num in priority_1_templates:
+        return 1
+    elif template_num in priority_3_templates:
+        return 3
+    else:
+        return 2  # Everything else is Priority 2
+
 def generate_cim_templates() -> List[Tuple[str, str, str, Set[str]]]:
     """
     Generate CIM Wizard templates with priority-based organization
@@ -841,7 +870,6 @@ def generate_cim_templates() -> List[Tuple[str, str, str, Set[str]]]:
     - Priority 1: Inner cim_vector schema (buildings, properties, projects)
     - Priority 2: Cross-schema (cim_vector + cim_census/cim_network/cim_raster)
     - Priority 3: Inner cim_census/cim_raster/cim_network
-    - Priority 4: Cross-schema (cim_raster/cim_network/cim_census without cim_vector)
     
     Returns: List of (template_id, sql, natural_language, tags)
     """
@@ -902,21 +930,19 @@ LIMIT {limit};
         {"grid", "voltage_filter", "basic"}
     ))
     
-    # A4: Census population by region
+    # A4: Census population by zone
     templates.append((
         "CIM_A4_census_population",
         """
-SELECT c.SEZ2011, c.REGIONE, c.PROVINCIA, c.COMUNE,
-       c.P1 as total_population,
-       c.P2 as male_population,
-       c.P3 as female_population
+SELECT c."SEZ2011", c."P1" as total_population,
+       c."P2" as male_population,
+       c."P3" as female_population
 FROM cim_census.censusgeo c
-WHERE c.REGIONE = '{region}'
-  AND c.P1 >= {min_population}
-ORDER BY c.P1 DESC
+WHERE c."P1" >= {min_population}
+ORDER BY c."P1" DESC
 LIMIT {limit};
         """.strip(),
-        "Analyze population distribution by gender in census areas for region {region} with minimum population of {min_population}, ordered by total population descending, limit to {limit} results",
+        "Analyze population distribution by gender in census areas with minimum population of {min_population}, ordered by total population descending, limit to {limit} results",
         {"census", "demographics", "basic"}
     ))
     
@@ -974,6 +1000,189 @@ LIMIT {limit};
         {"building", "project", "spatial_predicate", "basic"}
     ))
     
+    # NEW PRIORITY 1 TEMPLATES - Simple cim_vector queries
+    
+    # A10: Count buildings by type
+    templates.append((
+        "CIM_A10_count_buildings_by_type",
+        """
+SELECT bp.type, COUNT(*) as building_count
+FROM cim_vector.cim_wizard_building_properties bp
+WHERE bp.project_id = '{project_id}'
+  AND bp.scenario_id = '{scenario_id}'
+GROUP BY bp.type
+ORDER BY building_count DESC;
+        """.strip(),
+        "Count buildings by type in project {project_id} scenario {scenario_id}, ordered by count descending",
+        {"building", "aggregation", "type", "basic"}
+    ))
+    
+    # A11: Buildings by area range
+    templates.append((
+        "CIM_A11_buildings_by_area_range",
+        """
+SELECT bp.building_id, bp.type, bp.area, bp.height
+FROM cim_vector.cim_wizard_building_properties bp
+WHERE bp.project_id = '{project_id}'
+  AND bp.scenario_id = '{scenario_id}'
+  AND bp.area BETWEEN {min_area} AND {max_area}
+ORDER BY bp.area DESC
+LIMIT {limit};
+        """.strip(),
+        "Find buildings with area between {min_area} and {max_area} square meters in project {project_id} scenario {scenario_id}, ordered by area descending, limit to {limit} results",
+        {"building", "area_filter", "range", "basic"}
+    ))
+    
+    # A12: Average building metrics
+    templates.append((
+        "CIM_A12_average_building_metrics",
+        """
+SELECT AVG(bp.height) as avg_height,
+       AVG(bp.area) as avg_area,
+       AVG(bp.volume) as avg_volume,
+       AVG(bp.number_of_floors) as avg_floors,
+       COUNT(*) as total_buildings
+FROM cim_vector.cim_wizard_building_properties bp
+WHERE bp.project_id = '{project_id}'
+  AND bp.scenario_id = '{scenario_id}';
+        """.strip(),
+        "Calculate average building metrics (height, area, volume, floors) for project {project_id} scenario {scenario_id}",
+        {"building", "aggregation", "statistics", "basic"}
+    ))
+    
+    # A13: Buildings by construction year
+    templates.append((
+        "CIM_A13_buildings_by_year",
+        """
+SELECT bp.building_id, bp.type, bp.const_year, bp.height, bp.area
+FROM cim_vector.cim_wizard_building_properties bp
+WHERE bp.project_id = '{project_id}'
+  AND bp.scenario_id = '{scenario_id}'
+  AND bp.const_year >= {year}
+ORDER BY bp.const_year DESC
+LIMIT {limit};
+        """.strip(),
+        "Find buildings constructed since year {year} in project {project_id} scenario {scenario_id}, ordered by construction year descending, limit to {limit} results",
+        {"building", "year_filter", "temporal", "basic"}
+    ))
+    
+    # A14: Tall buildings
+    templates.append((
+        "CIM_A14_tall_buildings",
+        """
+SELECT bp.building_id, bp.type, bp.height, bp.number_of_floors, bp.area
+FROM cim_vector.cim_wizard_building_properties bp
+WHERE bp.project_id = '{project_id}'
+  AND bp.scenario_id = '{scenario_id}'
+  AND bp.height >= {min_height}
+ORDER BY bp.height DESC
+LIMIT {limit};
+        """.strip(),
+        "Find tall buildings (height >= {min_height} meters) in project {project_id} scenario {scenario_id}, ordered by height descending, limit to {limit} results",
+        {"building", "height_filter", "basic"}
+    ))
+    
+    # A15: Buildings by number of floors
+    templates.append((
+        "CIM_A15_buildings_by_floors",
+        """
+SELECT bp.building_id, bp.type, bp.number_of_floors, bp.height, bp.area
+FROM cim_vector.cim_wizard_building_properties bp
+WHERE bp.project_id = '{project_id}'
+  AND bp.scenario_id = '{scenario_id}'
+  AND bp.number_of_floors >= {min_people}
+ORDER BY bp.number_of_floors DESC
+LIMIT {limit};
+        """.strip(),
+        "Find buildings with at least {min_people} floors in project {project_id} scenario {scenario_id}, ordered by floor count descending, limit to {limit} results",
+        {"building", "floors_filter", "basic"}
+    ))
+    
+    # A16: Total building area by type
+    templates.append((
+        "CIM_A16_total_area_by_type",
+        """
+SELECT bp.type, 
+       COUNT(*) as building_count,
+       SUM(bp.area) as total_area,
+       AVG(bp.area) as avg_area
+FROM cim_vector.cim_wizard_building_properties bp
+WHERE bp.project_id = '{project_id}'
+  AND bp.scenario_id = '{scenario_id}'
+GROUP BY bp.type
+ORDER BY total_area DESC;
+        """.strip(),
+        "Calculate total and average building area by type for project {project_id} scenario {scenario_id}, ordered by total area descending",
+        {"building", "aggregation", "area", "basic"}
+    ))
+    
+    # A17: Buildings with population data
+    templates.append((
+        "CIM_A17_buildings_with_population",
+        """
+SELECT bp.building_id, bp.type, bp.n_people, bp.n_family, bp.area
+FROM cim_vector.cim_wizard_building_properties bp
+WHERE bp.project_id = '{project_id}'
+  AND bp.scenario_id = '{scenario_id}'
+  AND bp.n_people > 0
+ORDER BY bp.n_people DESC
+LIMIT {limit};
+        """.strip(),
+        "Find buildings with population data in project {project_id} scenario {scenario_id}, ordered by number of people descending, limit to {limit} results",
+        {"building", "population", "filter", "basic"}
+    ))
+    
+    # A18: Project scenario summary
+    templates.append((
+        "CIM_A18_project_summary",
+        """
+SELECT ps.project_id, ps.project_name, ps.scenario_name,
+       public.ST_Area(ps.project_boundary) as boundary_area_sqm,
+       (SELECT COUNT(*) FROM cim_vector.cim_wizard_building_properties bp 
+        WHERE bp.project_id = ps.project_id AND bp.scenario_id = ps.scenario_id) as building_count
+FROM cim_vector.cim_wizard_project_scenario ps
+WHERE ps.project_id = '{project_id}'
+  AND ps.scenario_id = '{scenario_id}';
+        """.strip(),
+        "Get project scenario summary with boundary area and building count for project {project_id} scenario {scenario_id}",
+        {"project", "summary", "aggregation", "basic"}
+    ))
+    
+    # A19: Building density by area
+    templates.append((
+        "CIM_A19_building_density",
+        """
+SELECT bp.type,
+       COUNT(*) as building_count,
+       SUM(bp.area) as total_footprint_area,
+       AVG(bp.height) as avg_height
+FROM cim_vector.cim_wizard_building_properties bp
+WHERE bp.project_id = '{project_id}'
+  AND bp.scenario_id = '{scenario_id}'
+  AND bp.area > {min_area}
+GROUP BY bp.type
+HAVING COUNT(*) >= {min_buildings}
+ORDER BY building_count DESC;
+        """.strip(),
+        "Analyze building density and metrics by type for buildings with area > {min_area} sqm in project {project_id} scenario {scenario_id}, showing types with at least {min_buildings} buildings, ordered by count descending",
+        {"building", "aggregation", "density", "basic"}
+    ))
+    
+    # A20: Simple building list
+    templates.append((
+        "CIM_A20_simple_building_list",
+        """
+SELECT b.building_id, bp.type, bp.height, bp.area
+FROM cim_vector.cim_wizard_building b
+JOIN cim_vector.cim_wizard_building_properties bp ON b.building_id = bp.building_id AND b.lod = bp.lod
+WHERE bp.project_id = '{project_id}'
+  AND bp.scenario_id = '{scenario_id}'
+LIMIT {limit};
+        """.strip(),
+        "List buildings with basic properties in project {project_id} scenario {scenario_id}, limit to {limit} results",
+        {"building", "list", "basic"}
+    ))
+    
     # ==========================================================================
     # PRIORITY 2: CROSS-SCHEMA WITH CIM_VECTOR
     # Queries combining cim_vector with census/network/raster
@@ -984,17 +1193,16 @@ LIMIT {limit};
         "CIM_A8_buildings_in_census",
         """
 SELECT b.building_id, bp.type, bp.height, 
-       c.SEZ2011, c.REGIONE, c.COMUNE,
+       c."SEZ2011",
        public.ST_Area(b.building_geometry) as building_area_sqm
 FROM cim_vector.cim_wizard_building b
 JOIN cim_vector.cim_wizard_building_properties bp ON b.building_id = bp.building_id AND b.lod = bp.lod
 JOIN cim_census.censusgeo c ON public.ST_Within(public.ST_Centroid(b.building_geometry), c.geometry)
 WHERE bp.project_id = '{project_id}'
   AND bp.scenario_id = '{scenario_id}'
-  AND c.REGIONE = '{region}'
 LIMIT {limit};
         """.strip(),
-        "Find buildings within census zones in region {region} for project {project_id} scenario {scenario_id}, limit to {limit} results",
+        "Find buildings within census zones for project {project_id} scenario {scenario_id}, limit to {limit} results",
         {"building", "census", "spatial_predicate", "basic"}
     ))
     
@@ -1129,17 +1337,13 @@ LIMIT {limit};
     templates.append((
         "CIM_B6_census_employment",
         """
-SELECT c.PROVINCIA,
-       COUNT(*) as census_areas,
-       AVG((c.P62::float / NULLIF(c.P60, 0)) * 100) as avg_unemployment_rate,
-       SUM(c.P61) as total_employed
+SELECT COUNT(*) as census_areas,
+       AVG((c."P62"::float / NULLIF(c."P60", 0)) * 100) as avg_unemployment_rate,
+       SUM(c."P61") as total_employed
 FROM cim_census.censusgeo c
-WHERE c.REGIONE = '{region}' 
-  AND c.P60 > 0
-GROUP BY c.PROVINCIA
-ORDER BY avg_unemployment_rate DESC;
+WHERE c."P60" > 0;
         """.strip(),
-        "Analyze employment and unemployment rates by province in region {region}, grouped by province and ordered by average unemployment rate descending",
+        "Analyze employment and unemployment rates across all census zones with working age population greater than zero",
         {"census", "employment", "aggregation", "statistics"}
     ))
     
@@ -1345,19 +1549,19 @@ LIMIT {limit};
         "CIM_C5_census_demographic_transition",
         """
 WITH demographic_indicators AS (
-  SELECT c.SEZ2011, c.REGIONE, c.PROVINCIA,
-         c.P1 as total_population,
-         (c.P14 + c.P15 + c.P16) as youth_0_14,
-         (c.P27 + c.P28 + c.P29) as elderly_65_plus,
-         c.PF3 as single_households,
-         c.P47 as university_graduates,
-         ROUND(((c.P27 + c.P28 + c.P29)::float / NULLIF((c.P14 + c.P15 + c.P16), 0)), 2) as aging_ratio,
-         ROUND((c.P47::float / NULLIF(c.P1, 0)) * 100, 1) as education_modernization
+  SELECT c."SEZ2011",
+         c."P1" as total_population,
+         (c."P14" + c."P15" + c."P16") as youth_0_14,
+         (c."P27" + c."P28" + c."P29") as elderly_65_plus,
+         c."PF3" as single_households,
+         c."P47" as university_graduates,
+         ROUND(((c."P27" + c."P28" + c."P29")::float / NULLIF((c."P14" + c."P15" + c."P16"), 0)), 2) as aging_ratio,
+         ROUND((c."P47"::float / NULLIF(c."P1", 0)) * 100, 1) as education_modernization
   FROM cim_census.censusgeo c
-  WHERE c.REGIONE = '{region}' AND c.P1 >= {min_population}
+  WHERE c."P1" >= {min_population}
 ),
 transition_classification AS (
-  SELECT SEZ2011, REGIONE, PROVINCIA,
+  SELECT "SEZ2011",
          aging_ratio, education_modernization,
          CASE 
            WHEN aging_ratio > 1.5 AND education_modernization > 10 THEN 'POST_TRANSITION_ADVANCED'
@@ -1366,16 +1570,16 @@ transition_classification AS (
          END as demographic_stage
   FROM demographic_indicators
 )
-SELECT demographic_stage, PROVINCIA,
+SELECT demographic_stage,
        COUNT(*) as areas_count,
        AVG(aging_ratio) as avg_aging_ratio,
        AVG(education_modernization) as avg_education_mod
 FROM transition_classification
-GROUP BY demographic_stage, PROVINCIA
+GROUP BY demographic_stage
 HAVING COUNT(*) >= {min_areas}
 ORDER BY avg_aging_ratio DESC;
         """.strip(),
-        "Comprehensive demographic transition analysis for region {region} with minimum population {min_population}, classifying areas by aging ratio (elderly/youth) and education modernization (university graduates percentage), grouped by demographic stage and province, showing only groups with at least {min_areas} areas, ordered by aging ratio descending",
+        "Comprehensive demographic transition analysis with minimum population {min_population}, classifying areas by aging ratio (elderly/youth) and education modernization (university graduates percentage), grouped by demographic stage, showing only groups with at least {min_areas} areas, ordered by aging ratio descending",
         {"census", "demographics", "advanced", "cte", "statistical_analysis"}
     ))
     
@@ -1549,6 +1753,9 @@ def create_comprehensive_sample(
     else:
         query_usage_frequency = "low_frequent"
     
+    # Determine priority
+    template_priority = getattr(sql_pair, 'priority', infer_template_priority(sql_pair.template_id, sql_pair.tags))
+    
     # Create comprehensive sample
     comprehensive_sample = {
         # Core Identifiers
@@ -1559,6 +1766,9 @@ def create_comprehensive_sample(
         # Natural Language Question
         "question": sql_pair.natural_language_desc,
         "question_tone": question_tone,
+        
+        # Priority
+        "priority": template_priority,
         
         # SQL Queries
         "sql_postgis": sql_pair.postgis_sql,
@@ -1762,7 +1972,7 @@ def generate_stage1_cim_dataset(
                 # Extract evidence
                 evidence = extract_evidence(postgis_sql, f"{template_id}_var_{i+1}", tags)
                 
-                # Create SqlPair
+                # Create SqlPair with priority
                 pair = SqlPair(
                     template_id=f"{template_id}_var_{i+1}",
                     complexity=complexity,
@@ -1772,6 +1982,9 @@ def generate_stage1_cim_dataset(
                     tags=tags,
                     evidence=evidence
                 )
+                
+                # Add priority metadata to pair
+                pair.priority = infer_template_priority(template_id, tags)
                 
                 dataset.append(pair)
                 
@@ -1855,6 +2068,7 @@ def generate_comprehensive_statistics(samples: List[Dict]) -> Dict:
             "training_samples": len([s for s in samples if not s['has_results']]),
             "generation_date": datetime.now().isoformat()
         },
+        "priority_distribution": {},
         "sql_types": {},
         "question_tones": {},
         "difficulty_levels": {},
@@ -1868,6 +2082,10 @@ def generate_comprehensive_statistics(samples: List[Dict]) -> Dict:
     
     # Collect statistics
     for sample in samples:
+        # Priority distribution
+        priority = sample.get('priority', 0)
+        stats['priority_distribution'][f'Priority_{priority}'] = stats['priority_distribution'].get(f'Priority_{priority}', 0) + 1
+        
         # SQL types
         sql_type = sample['sql_type']
         stats['sql_types'][sql_type] = stats['sql_types'].get(sql_type, 0) + 1
@@ -1924,6 +2142,17 @@ def print_summary_statistics(stats: Dict):
     print(f"   Total samples: {info['total_samples']:,}")
     print(f"   Training samples: {info['training_samples']:,}")
     print(f"   Evaluation samples: {info['evaluation_samples']:,}")
+    
+    print(f"\nPriority Distribution:")
+    for priority in ['Priority_1', 'Priority_2', 'Priority_3']:
+        count = stats['priority_distribution'].get(priority, 0)
+        percentage = (count / info['total_samples']) * 100 if count > 0 else 0
+        priority_desc = {
+            'Priority_1': 'Inner cim_vector (highest)',
+            'Priority_2': 'Cross-schema with cim_vector',
+            'Priority_3': 'Inner census/network/raster'
+        }.get(priority, '')
+        print(f"   {priority} ({priority_desc}): {count:,} ({percentage:.1f}%)")
     
     print(f"\nSQL Type Distribution:")
     for sql_type, count in list(stats['sql_types'].items())[:10]:

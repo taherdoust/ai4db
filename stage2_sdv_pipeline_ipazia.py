@@ -79,10 +79,29 @@ class CIMSchemaRules:
         "cim_network.scenario_buses",
         "cim_network.scenario_lines",
         "cim_census.censusgeo",
-        "cim_raster.dtm_raster",
-        "cim_raster.dsm_raster",
         "cim_raster.dtm",
         "cim_raster.dsm_sansalva"
+    ]
+    
+    # Correct ID column for each table (CRITICAL - not all tables have ".id"!)
+    TABLE_ID_COLUMNS = {
+        "cim_vector.cim_wizard_project_scenario": "scenario_id",
+        "cim_vector.cim_wizard_building": "building_id",
+        "cim_vector.cim_wizard_building_properties": "building_id",
+        "cim_network.network_buses": "bus_id",
+        "cim_network.network_lines": "line_id",
+        "cim_network.network_scenarios": "scenario_id",
+        "cim_network.scenario_buses": "scenario_id",  # Has composite key, use first
+        "cim_network.scenario_lines": "scenario_id",  # Has composite key, use first
+        "cim_census.censusgeo": "id",  # Only table with .id!
+        "cim_raster.dtm": "rid",
+        "cim_raster.dsm_sansalva": "rid",
+    }
+    
+    # Tables that have project_id column (for WHERE filtering)
+    TABLES_WITH_PROJECT_ID = [
+        "cim_vector.cim_wizard_project_scenario",
+        "cim_vector.cim_wizard_building_properties"
     ]
     
     # Valid join pairs (table1, table2) based on schema relationships
@@ -93,10 +112,6 @@ class CIMSchemaRules:
         ("cim_vector.cim_wizard_project_scenario", "cim_vector.cim_wizard_building_properties"),
         ("cim_vector.cim_wizard_building", "cim_census.censusgeo"),
         ("cim_census.censusgeo", "cim_vector.cim_wizard_building"),
-        ("cim_vector.cim_wizard_building", "cim_raster.dsm_raster"),
-        ("cim_raster.dsm_raster", "cim_vector.cim_wizard_building"),
-        ("cim_vector.cim_wizard_building", "cim_raster.dtm_raster"),
-        ("cim_raster.dtm_raster", "cim_vector.cim_wizard_building"),
         ("cim_vector.cim_wizard_building", "cim_raster.dtm"),
         ("cim_raster.dtm", "cim_vector.cim_wizard_building"),
         ("cim_vector.cim_wizard_building", "cim_raster.dsm_sansalva"),
@@ -126,8 +141,6 @@ class CIMSchemaRules:
         "cim_network.network_buses": ["geometry"],
         "cim_network.network_lines": ["geometry"],
         "cim_census.censusgeo": ["geometry"],
-        "cim_raster.dsm_raster": ["rast"],
-        "cim_raster.dtm_raster": ["rast"],
         "cim_raster.dtm": ["rast"],
         "cim_raster.dsm_sansalva": ["rast"],
     }
@@ -167,8 +180,6 @@ class CIMSchemaRules:
         "cim_network.network_buses": "POINT",
         "cim_network.network_lines": "LINESTRING",
         "cim_census.censusgeo": "POLYGON",
-        "cim_raster.dsm_raster": "RASTER",
-        "cim_raster.dtm_raster": "RASTER",
         "cim_raster.dtm": "RASTER",
         "cim_raster.dsm_sansalva": "RASTER",
     }
@@ -502,78 +513,199 @@ class SchemaAwareSQLAssembler:
     def assemble_sql(self, structure: Dict) -> str:
         """
         Assemble complete SQL query from structure
+        FIXED VERSION - eliminates duplicate aliases, raster issues, self-joins
         """
         
-        # Select components
+        # Select components with complexity control
         tables = self.select_valid_tables(structure)
+        
+        # Strict complexity control based on user requirements
+        difficulty = structure.get('difficulty_level', 'EASY')
+        
+        if difficulty == 'EASY':
+            # EASY: 1 schema, 1 table, 0 spatial functions
+            max_tables = 1
+            max_schemas = 1
+            max_spatial_funcs = 0
+        elif difficulty == 'MEDIUM':
+            # MEDIUM: 1 schema, 1-2 tables, 1 spatial function
+            max_tables = 2
+            max_schemas = 1
+            max_spatial_funcs = 1
+        elif difficulty == 'HARD':
+            # HARD: 2 schemas (including cim_vector), 2 tables, 1-2 spatial functions
+            max_tables = 2
+            max_schemas = 2
+            max_spatial_funcs = 2
+        else:  # VERY_HARD
+            # VERY_HARD: 2 schemas, 2-3 tables, 2-3 spatial functions
+            max_tables = 3
+            max_schemas = 2
+            max_spatial_funcs = 3
+        
+        # Limit tables
+        tables = tables[:max_tables]
+        
+        # Ensure schema count matches difficulty
+        schemas_used = set(t.split('.')[0] for t in tables)
+        if len(schemas_used) > max_schemas:
+            # Filter to keep only max_schemas
+            schema_priority = ['cim_vector', 'cim_network', 'cim_census', 'cim_raster']
+            keep_schemas = [s for s in schema_priority if s in schemas_used][:max_schemas]
+            tables = [t for t in tables if t.split('.')[0] in keep_schemas][:max_tables]
+        
         joins = self.find_valid_join_path(tables) if len(tables) > 1 else []
         functions = self.select_spatial_functions(structure, tables)
         
+        # Limit spatial functions based on difficulty
+        functions = functions[:max_spatial_funcs] if max_spatial_funcs > 0 else []
+        
         # Get parameters
         params = generate_realistic_values()
+        
+        # Generate unique aliases for all tables
+        alias_map = {}  # table -> alias
+        used_aliases = set()
+        
+        for table in tables:
+            # Generate meaningful alias (first 2-3 chars of table name)
+            table_name = table.split('.')[-1]
+            base_alias = table_name[:2].lower()
+            
+            # Ensure uniqueness
+            alias = base_alias
+            counter = 1
+            while alias in used_aliases:
+                alias = f"{base_alias}{counter}"
+                counter += 1
+            
+            alias_map[table] = alias
+            used_aliases.add(alias)
         
         # Build SQL components
         sql_parts = []
         
         # CTEs if needed
-        if structure['cte_count'] > 0:
+        if structure['cte_count'] > 0 and len(tables) > 0:
+            cte_table = tables[0]
+            cte_alias = alias_map[cte_table]
             sql_parts.append("WITH cte AS (")
-            sql_parts.append(f"  SELECT * FROM {tables[0]}")
-            sql_parts.append(f"  WHERE project_id = '{params['project_id']}'")
+            sql_parts.append(f"  SELECT * FROM {cte_table}")
+            
+            # Only add WHERE if table has project_id column
+            if cte_table in self.rules.TABLES_WITH_PROJECT_ID:
+                sql_parts.append(f"  WHERE project_id = '{params['project_id']}'")
+            
             sql_parts.append(")")
             main_table = "cte"
+            main_alias = cte_alias
         else:
-            main_table = tables[0]
+            main_table = tables[0] if tables else "cim_vector.cim_wizard_building"
+            main_alias = alias_map[tables[0]] if tables else "bu"
         
         # Main SELECT
         select_cols = []
         if tables:
-            # Use first table for main columns
-            table_alias = tables[0].split('.')[-1][0]
-            select_cols.append(f"{table_alias}.id")
+            first_table = tables[0]
+            first_alias = main_alias if structure['cte_count'] > 0 else alias_map[first_table]
             
-            # Add spatial function calls (with public schema prefix)
-            for i, func in enumerate(functions[:3]):  # Limit to 3 for simplicity
-                if func in ['ST_Area', 'ST_Length', 'ST_Distance']:
-                    select_cols.append(f"public.{func}({table_alias}.geometry) AS {func.lower()}_{i}")
-                elif func == 'ST_Centroid':
-                    select_cols.append(f"public.{func}({table_alias}.geometry) AS centroid")
+            # Select appropriate ID column based on table (use TABLE_ID_COLUMNS mapping)
+            id_col = self.rules.TABLE_ID_COLUMNS.get(first_table, "id")
+            select_cols.append(f"{first_alias}.{id_col}")
+            
+            # Add spatial function calls (limit based on difficulty)
+            geom_col = self._get_geometry_column(first_table)
+            if geom_col and max_spatial_funcs > 0:
+                for i, func in enumerate(functions[:min(2, max_spatial_funcs)]):
+                    if func in ['ST_Area', 'ST_Length']:
+                        select_cols.append(f"public.{func}({first_alias}.{geom_col}) AS {func.lower()}_{i}")
+                    elif func == 'ST_Centroid':
+                        select_cols.append(f"public.{func}({first_alias}.{geom_col}) AS centroid")
         
         sql_parts.append(f"SELECT {', '.join(select_cols) if select_cols else '*'}")
-        sql_parts.append(f"FROM {main_table if structure['cte_count'] > 0 else tables[0]} {tables[0].split('.')[-1][0]}")
         
-        # JOINs
+        # FROM clause
+        if structure['cte_count'] > 0:
+            sql_parts.append(f"FROM cte {main_alias}")
+        else:
+            sql_parts.append(f"FROM {main_table} {main_alias}")
+        
+        # JOINs with proper alias tracking and geometry awareness
         for i, (t1, t2, keys) in enumerate(joins):
-            t2_alias = t2.split('.')[-1][0]
-            t1_alias = t1.split('.')[-1][0]
+            t1_alias = alias_map[t1]
+            t2_alias = alias_map[t2]
             
-            # Spatial join if geometry involved (with public schema prefix)
-            if 'ST_Intersects' in functions or 'ST_Within' in functions:
-                spatial_pred = random.choice(['ST_Intersects', 'ST_Within'])
-                sql_parts.append(f"JOIN {t2} {t2_alias} ON public.{spatial_pred}({t1_alias}.geometry, {t2_alias}.geometry)")
+            # Get geometry column types (might be None if table has no geometry)
+            t1_geom_col = self._get_geometry_column(t1)
+            t2_geom_col = self._get_geometry_column(t2)
+            
+            # Skip if either table has no geometry column
+            if t1_geom_col is None or t2_geom_col is None:
+                # Can only do regular key-based joins
+                if keys and keys != ['geometry']:
+                    join_cond = ' AND '.join([f"{t1_alias}.{k} = {t2_alias}.{k}" for k in keys])
+                    sql_parts.append(f"JOIN {t2} {t2_alias} ON {join_cond}")
+                else:
+                    # Skip - no valid join possible
+                    continue
             else:
-                # Regular join
-                join_cond = ' AND '.join([f"{t1_alias}.{k} = {t2_alias}.{k}" for k in keys])
-                sql_parts.append(f"JOIN {t2} {t2_alias} ON {join_cond}")
+                # Both tables have geometry columns
+                is_raster_join = ('raster' in t1 or 'raster' in t2)
+                
+                if is_raster_join:
+                    # Raster-vector joins use ST_Intersects(rast, geometry)
+                    if 'raster' in t1 and 'raster' in t2:
+                        # Skip raster-raster joins (invalid)
+                        continue
+                    elif 'raster' in t1:
+                        # Raster on left, vector on right
+                        sql_parts.append(f"JOIN {t2} {t2_alias} ON public.ST_Intersects({t1_alias}.{t1_geom_col}, {t2_alias}.{t2_geom_col})")
+                    else:
+                        # Vector on left, raster on right
+                        sql_parts.append(f"JOIN {t2} {t2_alias} ON public.ST_Intersects({t2_alias}.{t2_geom_col}, {t1_alias}.{t1_geom_col})")
+                elif keys and keys != ['geometry']:
+                    # Regular join on keys
+                    join_cond = ' AND '.join([f"{t1_alias}.{k} = {t2_alias}.{k}" for k in keys])
+                    sql_parts.append(f"JOIN {t2} {t2_alias} ON {join_cond}")
+                else:
+                    # Spatial join (vector-vector)
+                    spatial_pred = random.choice(['ST_Intersects', 'ST_Within']) if 'ST_Within' in functions else 'ST_Intersects'
+                    sql_parts.append(f"JOIN {t2} {t2_alias} ON public.{spatial_pred}({t1_alias}.{t1_geom_col}, {t2_alias}.{t2_geom_col})")
         
-        # WHERE clause
+        # WHERE clause (only for non-CTE queries)
         where_clauses = []
-        if 'project_id' in str(tables):
-            where_clauses.append(f"project_id = '{params['project_id']}'")
-        if 'scenario_id' in str(tables):
-            where_clauses.append(f"scenario_id = '{params['scenario_id']}'")
+        if structure['cte_count'] == 0 and len(tables) > 0:
+            first_table = tables[0]
+            first_alias = alias_map[first_table]
+            
+            # Add project_id filter ONLY if first table has it
+            if first_table in self.rules.TABLES_WITH_PROJECT_ID:
+                where_clauses.append(f"{first_alias}.project_id = '{params['project_id']}'")
         
         if where_clauses:
             sql_parts.append(f"WHERE {' AND '.join(where_clauses)}")
         
         # GROUP BY for aggregation
-        if structure['sql_type'] == 'AGGREGATION':
-            sql_parts.append(f"GROUP BY {tables[0].split('.')[-1][0]}.id")
+        if structure['sql_type'] == 'AGGREGATION' and len(tables) > 0:
+            first_table = tables[0]
+            first_alias = main_alias if structure['cte_count'] > 0 else alias_map[first_table]
+            id_col = self.rules.TABLE_ID_COLUMNS.get(first_table, "id")
+            sql_parts.append(f"GROUP BY {first_alias}.{id_col}")
         
         # LIMIT
         sql_parts.append(f"LIMIT {params['limit']}")
         
         return '\n'.join(sql_parts)
+    
+    def _get_geometry_column(self, table: str) -> Optional[str]:
+        """Get the correct geometry/raster column name for a table (or None if no geometry)"""
+        if 'raster' in table:
+            return 'rast'
+        elif table in self.rules.GEOMETRY_COLUMNS:
+            return self.rules.GEOMETRY_COLUMNS[table][0]
+        else:
+            # Tables without geometry columns (network_scenarios, scenario_buses, scenario_lines)
+            return None
 
 
 # ============================================================================
@@ -773,7 +905,7 @@ def run_stage2_pipeline_ipazia(
     print(f"  - GPU: {use_gpu}")
     print(f"  - Epochs: {epochs}")
     print(f"  - Parallel workers: {num_workers}")
-    print(f"  - Estimated time: 2-4 hours (training) + 30-60 min (assembly)")
+    print(f"  - Estimated time: 2-4 min (training) + 30-60 sec (assembly)") #- Estimated time: 2-4 hours (training) + 30-60 min (assembly)
     
     # Check dependencies
     if not SDV_AVAILABLE:
@@ -806,13 +938,20 @@ def run_stage2_pipeline_ipazia(
     print(f"      [OK] Extracted features: {features_df.shape}")
     print(f"      Features: {list(features_df.columns)}")
     
-    # Train CTGAN
+    # Train CTGAN (delete old model to force retraining)
     print(f"\n[3/6] Training CTGAN synthesizer...")
+    model_file = output_file.replace('.jsonl', '_model.pkl')
+    
+    # Delete old model if exists (force retrain)
+    import os
+    if os.path.exists(model_file):
+        print(f"      [OK] Deleting old model to force retraining: {model_file}")
+        os.remove(model_file)
+    
     trainer = CTGANTrainerIPAZIA(use_gpu=use_gpu)
     trainer.train(features_df, epochs=epochs)
     
     # Save model
-    model_file = output_file.replace('.jsonl', '_model.pkl')
     trainer.save(model_file)
     
     # Generate synthetic structures (1.5x target for filtering)

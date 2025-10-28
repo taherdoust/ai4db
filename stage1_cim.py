@@ -42,10 +42,30 @@ CIM_SCHEMAS = {
     },
     "cim_census": {
         "censusgeo": {
-            "columns": ["SEZ2011", "geometry", "CODREG", "REGIONE", "PROVINCIA", "COMUNE", "P1", "P2", "P3", "P14", "P15", "P16", "P27", "P28", "P29", "P47", "P60", "P61", "P62", "ST1", "ST2", "A2", "A3", "PF1", "PF2", "PF3", "E1", "E2"],
+            "columns": [
+                "SEZ2011", "geometry", "Shape_Area",
+                # Administrative hierarchy
+                "CODREG", "REGIONE", "CODPRO", "PROVINCIA", "CODCOM", "COMUNE", "PROCOM", "NSEZ", "ACE", "CODLOC", "CODASC",
+                # Population statistics (key indicators)
+                "P1", "P2", "P3", "P14", "P15", "P16", "P27", "P28", "P29", "P47", "P60", "P61", "P62",
+                # Housing statistics
+                "ST1", "ST2", "ST3", "ST4", "ST5",
+                # Building age distribution (construction periods - critical for energy modeling)
+                "E8", "E9", "E10", "E11", "E12", "E13", "E14", "E15", "E16",
+                # Building attributes (available columns)
+                "A2", "A3", "A5", "A6", "A7", "A44", "A46", "A47", "A48",
+                # Family statistics
+                "PF1", "PF2", "PF3", "PF4", "PF5"
+            ],
             "geometry_columns": ["geometry"],
-            "numeric_columns": ["P1", "P2", "P3", "P14", "P15", "P16", "P27", "P28", "P29", "P47", "P60", "P61", "P62", "ST1", "ST2", "A2", "A3", "PF1", "PF2", "PF3", "E1", "E2"],
-            "categorical_columns": ["REGIONE", "PROVINCIA", "COMUNE"],
+            "numeric_columns": [
+                "P1", "P2", "P3", "P14", "P15", "P16", "P27", "P28", "P29", "P47", "P60", "P61", "P62",
+                "ST1", "ST2", "ST3", "ST4", "ST5",
+                "E8", "E9", "E10", "E11", "E12", "E13", "E14", "E15", "E16",
+                "A2", "A3", "A5", "A6", "A7", "A44", "A46", "A47", "A48",
+                "PF1", "PF2", "PF3", "PF4", "PF5"
+            ],
+            "categorical_columns": ["REGIONE", "PROVINCIA", "COMUNE", "CODREG", "CODPRO", "CODCOM", "PROCOM"],
             "srid": 4326
         }
     },
@@ -76,16 +96,7 @@ CIM_SCHEMAS = {
         }
     },
     "cim_raster": {
-        "dtm_raster": {
-            "columns": ["rid", "rast", "filename", "srid"],
-            "raster_columns": ["rast"],
-            "numeric_columns": []
-        },
-        "dsm_raster": {
-            "columns": ["rid", "rast", "filename", "srid"],
-            "raster_columns": ["rast"],
-            "numeric_columns": []
-        },
+        
         "dtm": {
             "columns": ["rid", "rast"],
             "raster_columns": ["rast"],

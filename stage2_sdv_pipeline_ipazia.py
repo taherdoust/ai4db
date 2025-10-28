@@ -789,6 +789,17 @@ def run_stage2_pipeline_ipazia(
             stage1_samples.append(json.loads(line))
     print(f"      [OK] Loaded {len(stage1_samples):,} Stage 1 samples")
     
+    # Filter by NoErr (if available) or quality_score
+    initial_count = len(stage1_samples)
+    if stage1_samples and 'no_error' in stage1_samples[0]:
+        stage1_samples = [s for s in stage1_samples if s.get('no_error', True)]
+        print(f"      [OK] Filtered by no_error=True: {len(stage1_samples):,} samples ({len(stage1_samples)/initial_count*100:.1f}%)")
+    elif stage1_samples and 'quality_score' in stage1_samples[0]:
+        stage1_samples = [s for s in stage1_samples if s.get('quality_score', 1.0) >= 0.75]
+        print(f"      [OK] Filtered by quality_score>=0.75: {len(stage1_samples):,} samples ({len(stage1_samples)/initial_count*100:.1f}%)")
+    else:
+        print(f"      [WARNING] No no_error or quality_score field found - using all samples")
+    
     # Extract features
     print(f"\n[2/6] Extracting features for CTGAN training...")
     features_df = extract_features(stage1_samples)

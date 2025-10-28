@@ -3,7 +3,7 @@
     "total_samples": 7600,
     "evaluation_samples": 100,
     "training_samples": 7500,
-    "generation_date": "2025-10-27T18:15:43.640972"
+    "generation_date": "2025-10-28T13:20:35.570068"
   },
   "priority_distribution": {
     "Priority_1": 4200,
@@ -48,8 +48,8 @@
     "ST_CENTROID": 1200,
     "ST_DISTANCE": 1000,
     "ST_SUMMARYSTATS": 600,
-    "ST_MAKEPOINT": 400,
     "ST_SETSRID": 400,
+    "ST_MAKEPOINT": 400,
     "ST_WITHIN": 400,
     "ST_INTERSECTION": 400,
     "ST_CLIP": 400,
@@ -70,7 +70,6 @@
     "vector_only": 10800
   },
   "schema_complexity": {
-    "MULTI_SCHEMA": 7200,
-    "SINGLE_TABLE": 400
+    "MULTI_SCHEMA": 7600
   }
 }

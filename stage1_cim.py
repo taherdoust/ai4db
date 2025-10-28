@@ -945,12 +945,12 @@ LIMIT {limit};
     templates.append((
         "CIM_A4_census_population",
         """
-SELECT c."SEZ2011", c."P1" as total_population,
-       c."P2" as male_population,
-       c."P3" as female_population
+SELECT c.sez2011, c.p1 as total_population,
+       c.p2 as male_population,
+       c.p3 as female_population
 FROM cim_census.censusgeo c
-WHERE c."P1" >= {min_population}
-ORDER BY c."P1" DESC
+WHERE c.p1 >= {min_population}
+ORDER BY c.p1 DESC
 LIMIT {limit};
         """.strip(),
         "Analyze population distribution by gender in census areas with minimum population of {min_population}, ordered by total population descending, limit to {limit} results",
@@ -1204,7 +1204,7 @@ LIMIT {limit};
         "CIM_A8_buildings_in_census",
         """
 SELECT b.building_id, bp.type, bp.height, 
-       c."SEZ2011",
+       c.sez2011,
        public.ST_Area(b.building_geometry) as building_area_sqm
 FROM cim_vector.cim_wizard_building b
 JOIN cim_vector.cim_wizard_building_properties bp ON b.building_id = bp.building_id AND b.lod = bp.lod
@@ -1221,14 +1221,14 @@ LIMIT {limit};
     templates.append((
         "CIM_A9_census_in_project",
         """
-SELECT c."SEZ2011",
-       c."P1" as total_population,
+SELECT c.sez2011,
+       c.p1 as total_population,
        public.ST_Area(c.geometry) as census_area_sqm
 FROM cim_census.censusgeo c
 JOIN cim_vector.cim_wizard_project_scenario ps ON public.ST_Intersects(c.geometry, ps.project_boundary)
 WHERE ps.project_id = '{project_id}'
   AND ps.scenario_id = '{scenario_id}'
-ORDER BY c."P1" DESC
+ORDER BY c.p1 DESC
 LIMIT {limit};
         """.strip(),
         "Find census zones that intersect with project {project_id} scenario {scenario_id} boundary, ordered by total population descending, limit to {limit} results",
@@ -1285,7 +1285,7 @@ LIMIT {limit};
     templates.append((
         "CIM_B3_building_census_aggregation",
         """
-SELECT cg.COMUNE as municipality,
+SELECT cg.comune as municipality,
        COUNT(b.building_id) as buildings_count,
        SUM(bp.n_people) as total_population,
        AVG(bp.area) as avg_building_area
@@ -1294,7 +1294,7 @@ JOIN cim_vector.cim_wizard_building_properties bp ON b.building_id = bp.building
 JOIN cim_census.censusgeo cg ON public.ST_Within(public.ST_Centroid(b.building_geometry), cg.geometry)
 WHERE bp.project_id = '{project_id}' 
   AND bp.scenario_id = '{scenario_id}'
-GROUP BY cg.COMUNE
+GROUP BY cg.comune
 ORDER BY total_population DESC
 LIMIT {limit};
         """.strip(),
@@ -1349,10 +1349,10 @@ LIMIT {limit};
         "CIM_B6_census_employment",
         """
 SELECT COUNT(*) as census_areas,
-       AVG((c."P62"::float / NULLIF(c."P60", 0)) * 100) as avg_unemployment_rate,
-       SUM(c."P61") as total_employed
+       AVG((c.p62::float / NULLIF(c.p60, 0)) * 100) as avg_unemployment_rate,
+       SUM(c.p61) as total_employed
 FROM cim_census.censusgeo c
-WHERE c."P60" > 0;
+WHERE c.p60 > 0;
         """.strip(),
         "Analyze employment and unemployment rates across all census zones with working age population greater than zero",
         {"census", "employment", "aggregation", "statistics"}
@@ -1456,8 +1456,8 @@ type_analysis AS (
   GROUP BY type, height_category
 )
 SELECT type, height_category, building_count, 
-       ROUND(avg_height, 2) as avg_height_m,
-       ROUND(avg_footprint, 2) as avg_footprint_sqm,
+       ROUND((avg_height)::numeric, 2) as avg_height_m,
+       ROUND((avg_footprint)::numeric, 2) as avg_footprint_sqm,
        total_residents
 FROM type_analysis
 ORDER BY building_count DESC;
@@ -1502,7 +1502,7 @@ LIMIT {limit};
         """
 WITH building_census_overlay AS (
   SELECT b.building_id, bp.type, bp.height, bp.area, bp.n_people,
-         c."SEZ2011", c."P1" as census_population,
+         c.sez2011, c.p1 as census_population,
          public.ST_Area(public.ST_Intersection(b.building_geometry, c.geometry)) / public.ST_Area(b.building_geometry) as overlap_ratio
   FROM cim_vector.cim_wizard_building b
   JOIN cim_vector.cim_wizard_building_properties bp ON b.building_id = bp.building_id AND b.lod = bp.lod
@@ -1560,16 +1560,16 @@ LIMIT {limit};
         "CIM_C5_census_demographic_transition",
         """
 WITH demographic_indicators AS (
-  SELECT c."SEZ2011",
-         c."P1" as total_population,
-         (c."P14" + c."P15" + c."P16") as youth_0_14,
-         (c."P27" + c."P28" + c."P29") as elderly_65_plus,
-         c."PF3" as single_households,
-         c."P47" as university_graduates,
-         ROUND(((c."P27" + c."P28" + c."P29")::float / NULLIF((c."P14" + c."P15" + c."P16"), 0)), 2) as aging_ratio,
-         ROUND((c."P47"::float / NULLIF(c."P1", 0)) * 100, 1) as education_modernization
+  SELECT c.sez2011,
+         c.p1 as total_population,
+         (c.p14 + c.p15 + c.p16) as youth_0_14,
+         (c.p27 + c.p28 + c.p29) as elderly_65_plus,
+         c.pf3 as single_households,
+         c.p47 as university_graduates,
+         ROUND((((c.p27 + c.p28 + c.p29)::float / NULLIF((c.p14 + c.p15 + c.p16))::numeric, 0)), 2) as aging_ratio,
+         ROUND(((c.p47::float / NULLIF(c.p1)::numeric, 0)) * 100, 1) as education_modernization
   FROM cim_census.censusgeo c
-  WHERE c."P1" >= {min_population}
+  WHERE c.p1 >= {min_population}
 ),
 transition_classification AS (
   SELECT "SEZ2011",
@@ -1600,7 +1600,7 @@ ORDER BY avg_aging_ratio DESC;
         """
 WITH project_census AS (
   SELECT ps.project_id, ps.scenario_id, ps.project_name,
-         c."SEZ2011", c.geometry
+         c.sez2011, c.geometry
   FROM cim_vector.cim_wizard_project_scenario ps
   JOIN cim_census.censusgeo c ON public.ST_Intersects(ps.project_boundary, c.geometry)
   WHERE ps.project_id = '{project_id}'
@@ -1637,7 +1637,7 @@ overlap_percentages AS (
   SELECT project1_id, project1_name,
          project2_id, project2_name,
          overlap_area,
-         ROUND((overlap_area / NULLIF(project1_area, 0)) * 100, 2) as overlap_percentage
+         ROUND(((overlap_area / NULLIF(project1_area)::numeric, 0)) * 100, 2) as overlap_percentage
   FROM project_overlaps
 )
 SELECT project1_id, project1_name,
@@ -1701,10 +1701,10 @@ raster_values AS (
 SELECT building_id,
        type,
        declared_height,
-       ROUND(avg_surface_elevation, 2) as avg_surface_elevation_m,
-       ROUND(avg_ground_elevation, 2) as avg_ground_elevation_m,
-       ROUND(avg_surface_elevation - avg_ground_elevation, 2) as calculated_height_m,
-       ROUND(ABS(declared_height - (avg_surface_elevation - avg_ground_elevation)), 2) as height_difference_m
+       ROUND((avg_surface_elevation)::numeric, 2) as avg_surface_elevation_m,
+       ROUND((avg_ground_elevation)::numeric, 2) as avg_ground_elevation_m,
+       ROUND((avg_surface_elevation - avg_ground_elevation)::numeric, 2) as calculated_height_m,
+       ROUND((ABS(declared_height - (avg_surface_elevation - avg_ground_elevation)))::numeric, 2) as height_difference_m
 FROM raster_values;
         """.strip(),
         "Calculate building height from DSM and DTM raster difference for building {census_id} in project {project_id} scenario {scenario_id}, comparing calculated height (DSM - DTM) with declared height and showing the difference",

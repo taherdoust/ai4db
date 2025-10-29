@@ -1,13 +1,13 @@
 {
-  "last_processed_idx": 5999,
-  "total_augmented_samples": 21576,
-  "timestamp": "2025-10-29T08:39:48.854948",
+  "last_processed_idx": 8999,
+  "total_augmented_samples": 32488,
+  "timestamp": "2025-10-29T17:12:28.171779",
   "stage2_file": "training_datasets/stage2_filtered.jsonl",
   "target_multiplier": 10,
   "api_call_count": 1000,
-  "api_success_count": 1000,
-  "api_fail_count": 0,
+  "api_success_count": 999,
+  "api_fail_count": 1,
   "rejected_complex_count": 0,
-  "rejected_quality_count": 481,
-  "elapsed_time_seconds": 54434.6434776783
+  "rejected_quality_count": 535,
+  "elapsed_time_seconds": 85193.96032857895
 }

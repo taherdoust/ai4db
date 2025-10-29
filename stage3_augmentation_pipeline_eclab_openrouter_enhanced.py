@@ -450,17 +450,25 @@ Question: [natural language question here]
 Instruction: [step-by-step decomposition instruction]
 
 Guidelines for QUESTIONS:
-- Natural, diverse phrasing (direct, interrogative, analytical)
+- Use DIVERSE TONES for variety:
+  * INTERROGATIVE: "What are...", "Which buildings...", "Where can I find..."
+  * DIRECT: "Find all...", "Show me...", "List the..."
+  * ANALYTICAL: "Analyze the...", "Determine which...", "Calculate the..."
+  * AGGREGATE: "Count how many...", "Sum the total...", "Average the..."
+  * SPATIAL_SPECIFIC: "Buildings within...", "Areas intersecting...", "Zones near..."
+  * DESCRIPTIVE: "Can you retrieve...", "I need to know...", "Provide information about..."
+- Mix up the question styles across the {num} pairs
 - Clearly express the spatial intent
-- Keep it concise and meaningful
+- Keep questions natural and meaningful (20-500 characters)
 
 Guidelines for INSTRUCTIONS (VERY IMPORTANT):
-- Break down the task into clear steps
-- Identify which tables to use
+- Break down the task into clear, detailed steps (20-1200 characters)
+- Identify which tables to use and their schemas
 - Identify which geometry columns to access
-- Specify which PostGIS spatial functions to apply
+- Specify which PostGIS spatial functions to apply and why
 - Explain the reasoning for JOIN conditions or filters
-- Example good instruction: "First, identify the buildings table (cim_vector.building) with geometry column 'geom'. Then, find the census zones (cim_census.zones) that spatially intersect using ST_Intersects. Apply ST_Area to measure the intersection area. Filter by project_id for the target project."
+- For complex queries, provide comprehensive step-by-step decomposition
+- Example good instruction: "First, identify the buildings table (cim_vector.building) with geometry column 'geom'. Then, find the census zones (cim_census.zones) that spatially intersect using ST_Intersects. Apply ST_Area to measure the intersection area. Filter by project_id for the target project. Group results by zone and calculate aggregate statistics."
 - Example bad instruction: "Convert this question to SQL" (too simple!)
 """
         
@@ -468,7 +476,7 @@ Guidelines for INSTRUCTIONS (VERY IMPORTANT):
             response = self.client.generate(
                 prompt, 
                 system_prompt=system_prompt,
-                max_tokens=600,  # Increased for pairs
+                max_tokens=1000,  # Increased for longer instructions (up to 1200 chars)
                 temperature=0.85
             )
             
@@ -617,8 +625,8 @@ def filter_quality(
     pairs: List[Tuple[str, str]], 
     metadata: Dict, 
     min_length: int = 20, 
-    max_length: int = 300,
-    max_instruction_length: int = 800
+    max_length: int = 500,
+    max_instruction_length: int = 1200
 ) -> List[Tuple[str, str]]:
     """Filter question-instruction pairs by quality criteria"""
     

@@ -1,17 +1,15 @@
-training_datasets/*.jsonl
-
-# Environment variables and secrets
-.env
-.env.local
-*.key
-*_api_key.txt
-
 # Python cache
 __pycache__/
-*.pyc
-*.pyo
-*.pyd
+*.py[cod]
+*$py.class
+*.so
 .Python
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv
 
 # IDE
 .vscode/
@@ -20,15 +18,42 @@ __pycache__/
 *.swo
 *~
 
-# OS
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Environment variables
+.env
+.env.local
+
+# OS files
 .DS_Store
 Thumbs.db
 
-# Logs
-*.log
-nohup.out
+# ========================================
+# Large Training Dataset Files (>100 MB)
+# ========================================
 
-# Model files (optional - uncomment if too large)
-# *.pkl
-# *.pth
-# *.bin
+# Stage 1 datasets (usually < 100MB, but can grow)
+training_datasets/stage1_cim_dataset.jsonl
+training_datasets/stage1_cim_dataset_annotated.jsonl
+
+# Stage 2 datasets (50K samples, likely >100MB)
+training_datasets/stage2_synthetic_dataset_ipazia.jsonl
+training_datasets/stage2_filtered.jsonl
+training_datasets/stage2_synthetic_dataset_ipazia_model.pkl
+
+# Stage 3 datasets (180K+ samples, definitely >100MB)
+training_datasets/stage3_augmented_dataset_FINAL_checkpoint.jsonl
+training_datasets/stage3_augmented_dataset_final_checkpoint.jsonl
+training_datasets/stage3-v1/*.jsonl
+training_datasets/stage3-v1/*.log
+
+# Keep metadata and stats files (small)
+!training_datasets/*_stats.json
+!training_datasets/*_meta.json
+!training_datasets/*_report.json
+!training_datasets/stage3-v1/*_meta.json
+
+# Database connection files (if any)
+*.db
+*.sqlite

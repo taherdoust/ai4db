@@ -1145,20 +1145,39 @@ if __name__ == "__main__":
     print(f"  Target multiplier: {multiplier}x")
     print(f"  OpenRouter Model: {model}")
     
-    # Show cost estimate based on model
+    # Calculate realistic time and cost estimates
+    num_stage2_samples = 0
+    try:
+        with open(stage2_file, 'r') as f:
+            num_stage2_samples = sum(1 for _ in f)
+    except:
+        num_stage2_samples = 50000  # default estimate
+    
+    # Realistic time: 8-10 seconds per sample with OpenRouter API
+    estimated_hours = (num_stage2_samples * 9.0) / 3600
+    
+    # Cost estimate
     if 'gpt-4o-mini' in model:
-        print(f"  Estimated Cost: ~$3-5 (for 10K samples)")
+        cost_per_10k = 4
+        print(f"  Estimated Cost: ${num_stage2_samples/10000 * cost_per_10k:.1f} USD ({model})")
     elif 'gpt-4o' in model:
-        print(f"  Estimated Cost: ~$8-15 (for 10K samples)")
+        cost_per_10k = 12
+        print(f"  Estimated Cost: ${num_stage2_samples/10000 * cost_per_10k:.1f} USD ({model})")
     elif 'gpt-4-turbo' in model:
-        print(f"  Estimated Cost: ~$30-50 (for 10K samples)")
+        cost_per_10k = 40
+        print(f"  Estimated Cost: ${num_stage2_samples/10000 * cost_per_10k:.1f} USD ({model})")
     else:
         print(f"  Estimated Cost: Varies by model")
     
+    print(f"  Estimated Time: {estimated_hours:.1f} hours (~9 seconds per sample × {num_stage2_samples:,} samples)")
+    print(f"  [WARNING] This is SLOW due to sequential OpenRouter API calls")
+    print(f"  [TIP] Use checkpoints - progress saved every 1,000 samples")
+    
     print(f"")
-    print(f"  [OPTIMIZED] Performance Improvements:")
-    print(f"    - SentenceTransformer model cached (10-20x faster)")
-    print(f"    - Expected time: 2-4 hours (was 46 hours)")
+    print(f"  [INFO] Performance Notes:")
+    print(f"    - SentenceTransformer model cached (fast deduplication)")
+    print(f"    - Bottleneck: OpenRouter API calls (sequential, ~9 sec each)")
+    print(f"    - Checkpoints saved every 1,000 samples (resume-safe)")
     print(f"")
     print(f"  [NEW] ENHANCED Features:")
     print(f"    - Generates questions AND decomposition instructions")

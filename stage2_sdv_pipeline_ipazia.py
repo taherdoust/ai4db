@@ -905,7 +905,10 @@ def run_stage2_pipeline_ipazia(
     print(f"  - GPU: {use_gpu}")
     print(f"  - Epochs: {epochs}")
     print(f"  - Parallel workers: {num_workers}")
-    print(f"  - Estimated time: 2-4 min (training) + 30-60 sec (assembly)") #- Estimated time: 2-4 hours (training) + 30-60 min (assembly)
+    # Calculate realistic time estimate based on input size
+    estimated_train_minutes = (len(stage1_samples) / 6800) * 0.8  # 47 sec for 6.8K samples = 0.8 min
+    estimated_assembly_minutes = 3  # 2-3 minutes for assembly
+    print(f"  - Estimated time: {estimated_train_minutes:.1f} min (training) + {estimated_assembly_minutes} min (assembly) = {estimated_train_minutes + estimated_assembly_minutes:.1f} min total")
     
     # Check dependencies
     if not SDV_AVAILABLE:

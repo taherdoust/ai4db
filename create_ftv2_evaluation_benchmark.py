@@ -152,6 +152,28 @@ def weighted_stratified_sample(
     return selected
 
 
+def convert_to_json_serializable(obj):
+    """Convert non-JSON-serializable objects to serializable types."""
+    from uuid import UUID
+    from decimal import Decimal
+    from datetime import datetime, date, time as dt_time
+    
+    if isinstance(obj, UUID):
+        return str(obj)
+    elif isinstance(obj, Decimal):
+        return float(obj)
+    elif isinstance(obj, (datetime, date, dt_time)):
+        return obj.isoformat()
+    elif isinstance(obj, bytes):
+        return obj.hex()
+    elif isinstance(obj, (list, tuple)):
+        return [convert_to_json_serializable(item) for item in obj]
+    elif isinstance(obj, dict):
+        return {k: convert_to_json_serializable(v) for k, v in obj.items()}
+    else:
+        return obj
+
+
 def execute_query(query: str, engine, timeout: int = 30) -> Dict[str, Any]:
     """Execute SQL query and capture results."""
     start_time = time.time()
@@ -161,7 +183,13 @@ def execute_query(query: str, engine, timeout: int = 30) -> Dict[str, Any]:
             conn.execute(text(f"SET statement_timeout = {timeout * 1000};"))
             result = conn.execute(text(query))
             rows = result.fetchall()
-            result_data = [tuple(row) for row in rows]
+            
+            # Convert rows to JSON-serializable format
+            result_data = []
+            for row in rows:
+                converted_row = [convert_to_json_serializable(val) for val in row]
+                result_data.append(converted_row)
+            
             execution_time = time.time() - start_time
             
             return {

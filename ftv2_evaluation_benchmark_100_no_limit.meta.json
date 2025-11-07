@@ -1,0 +1,33 @@
+{
+  "benchmark_version": "FTv2",
+  "benchmark_size": 40,
+  "tasks_supported": [
+    "Q2SQL",
+    "QInst2SQL",
+    "Q2Inst"
+  ],
+  "executable_queries": 40,
+  "failed_queries": 0,
+  "difficulty_distribution": {
+    "UNKNOWN": 40
+  },
+  "sql_type_distribution": {
+    "AGGREGATION": 40
+  },
+  "average_importance": 0.7880000000000001,
+  "evaluation_metrics": {
+    "Q2SQL": [
+      "EM (Exact Match)",
+      "EX (Execution Accuracy)"
+    ],
+    "QInst2SQL": [
+      "EM (Exact Match)",
+      "EX (Execution Accuracy)"
+    ],
+    "Q2Inst": [
+      "Semantic Similarity",
+      "Downstream SQL Accuracy",
+      "Manual Review"
+    ]
+  }
+}

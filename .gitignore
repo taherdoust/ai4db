@@ -33,6 +33,11 @@ Thumbs.db
 # Large Training Dataset Files (>100 MB)
 # ========================================
 
+# Exclude ALL subdirectories under training_datasets/
+training_datasets/downloaded/
+training_datasets/stage3-v1/
+checkpoint_analysis/
+
 # Stage 1 datasets (usually < 100MB, but can grow)
 training_datasets/stage1_cim_dataset.jsonl
 training_datasets/stage1_cim_dataset_annotated.jsonl
@@ -45,14 +50,13 @@ training_datasets/stage2_synthetic_dataset_ipazia_model.pkl
 # Stage 3 datasets (180K+ samples, definitely >100MB)
 training_datasets/stage3_augmented_dataset_FINAL_checkpoint.jsonl
 training_datasets/stage3_augmented_dataset_final_checkpoint.jsonl
-training_datasets/stage3-v1/*.jsonl
-training_datasets/stage3-v1/*.log
 
-# Keep metadata and stats files (small)
+# Keep metadata and stats files (small, directly in training_datasets/)
 !training_datasets/*_stats.json
 !training_datasets/*_meta.json
 !training_datasets/*_report.json
-!training_datasets/stage3-v1/*_meta.json
+
+
 
 # Database connection files (if any)
 *.db

@@ -152,6 +152,131 @@ def weighted_stratified_sample(
     return selected
 
 
+def calculate_difficulty_dimensions(sql: str) -> Dict[str, Any]:
+    """
+    Calculate difficulty across all dimensions (matching stage1 methodology).
+    
+    Dimensions:
+    - Query Complexity: EASY, MEDIUM, HARD (based on CTEs, joins, subqueries)
+    - Spatial Complexity: BASIC, INTERMEDIATE, ADVANCED (based on PostGIS functions)
+    - Schema Complexity: SINGLE_TABLE, SINGLE_SCHEMA, MULTI_SCHEMA
+    - Function Count: 0, 1, 2, 3+
+    - Join Count: 0, 1, 2+
+    - Overall Complexity Level: A, B, C
+    """
+    sql_upper = sql.upper()
+    
+    # Extract spatial functions
+    spatial_functions = re.findall(r'ST_\w+', sql, re.IGNORECASE)
+    spatial_func_count = len(spatial_functions)
+    
+    # Extract tables (FROM and JOIN clauses)
+    tables = []
+    # FROM clause
+    from_matches = re.findall(r'FROM\s+(\w+\.\w+|\w+)', sql, re.IGNORECASE)
+    tables.extend(from_matches)
+    # JOIN clauses
+    join_matches = re.findall(r'JOIN\s+(\w+\.\w+|\w+)', sql, re.IGNORECASE)
+    tables.extend(join_matches)
+    
+    table_count = len(set(tables))
+    
+    # Calculate complexity score
+    cte_count = sql_upper.count('WITH')
+    join_count = sql_upper.count('JOIN')
+    subquery_count = sql.count('(SELECT')
+    
+    complexity_score = 0
+    if cte_count >= 2:
+        complexity_score += 2
+    elif cte_count == 1:
+        complexity_score += 1
+    
+    if join_count >= 2:
+        complexity_score += 2
+    elif join_count == 1:
+        complexity_score += 1
+    
+    if subquery_count >= 2:
+        complexity_score += 2
+    elif subquery_count == 1:
+        complexity_score += 1
+    
+    if 'PARTITION BY' in sql_upper or 'ROW_NUMBER' in sql_upper:
+        complexity_score += 2
+    
+    # Map to EASY, MEDIUM, HARD
+    if complexity_score >= 5:
+        query_complexity = "HARD"
+    elif complexity_score >= 3:
+        query_complexity = "MEDIUM"
+    else:
+        query_complexity = "EASY"
+    
+    # Spatial complexity
+    advanced_spatial = ['ST_CLUSTER', 'ST_SUMMARYSTATS', 'ST_VALUE', 'ST_MAPALGEBRA']
+    intermediate_spatial = ['ST_BUFFER', 'ST_TRANSFORM', 'ST_UNION', 'ST_INTERSECTION', 
+                           'ST_DIFFERENCE', 'ST_SYMDIFFERENCE', 'ST_CONVEXHULL']
+    
+    if any(func in sql_upper for func in advanced_spatial):
+        spatial_complexity = "ADVANCED"
+    elif any(func in sql_upper for func in intermediate_spatial) or spatial_func_count >= 2:
+        spatial_complexity = "INTERMEDIATE"
+    elif spatial_func_count >= 1:
+        spatial_complexity = "BASIC"
+    else:
+        spatial_complexity = "NONE"
+    
+    # Schema complexity
+    schema_count = len(set(t.split('.')[0] for t in tables if '.' in t))
+    if schema_count >= 2:
+        schema_complexity = "MULTI_SCHEMA"
+    elif table_count >= 2:
+        schema_complexity = "SINGLE_SCHEMA"
+    else:
+        schema_complexity = "SINGLE_TABLE"
+    
+    # Function count categorization
+    if spatial_func_count >= 3:
+        function_count = "3+"
+    elif spatial_func_count == 2:
+        function_count = "2"
+    elif spatial_func_count == 1:
+        function_count = "1"
+    else:
+        function_count = "0"
+    
+    # Join count categorization
+    if join_count >= 2:
+        join_count_cat = "2+"
+    elif join_count == 1:
+        join_count_cat = "1"
+    else:
+        join_count_cat = "0"
+    
+    # Overall complexity level (A, B, C)
+    if query_complexity == "HARD" or spatial_complexity == "ADVANCED" or schema_complexity == "MULTI_SCHEMA":
+        overall_complexity = "C"
+    elif query_complexity == "MEDIUM" or spatial_complexity == "INTERMEDIATE" or join_count >= 1:
+        overall_complexity = "B"
+    else:
+        overall_complexity = "A"
+    
+    return {
+        "query_complexity": query_complexity,
+        "spatial_complexity": spatial_complexity,
+        "schema_complexity": schema_complexity,
+        "function_count": function_count,
+        "join_count": join_count_cat,
+        "overall_difficulty": query_complexity,
+        "complexity_level": overall_complexity,
+        "complexity_score": complexity_score,
+        "spatial_functions": spatial_functions,
+        "spatial_function_count": spatial_func_count,
+        "table_count": table_count
+    }
+
+
 def convert_to_json_serializable(obj):
     """Convert non-JSON-serializable objects to serializable types."""
     from uuid import UUID
@@ -257,6 +382,9 @@ def create_ftv2_benchmark(
             else:
                 failed += 1
         
+        # Calculate difficulty dimensions from SQL
+        difficulty_dims = calculate_difficulty_dimensions(sql_query)
+        
         benchmark_item = {
             'benchmark_id': idx,
             'original_id': sample.get('id', f'sample_{idx}'),
@@ -268,9 +396,22 @@ def create_ftv2_benchmark(
             'expected_result': exec_result['result'],
             'expected_row_count': exec_result['row_count'],
             
-            'difficulty_level': sample.get('difficulty_level', 'UNKNOWN'),
+            # Difficulty dimensions (calculated from SQL)
+            'difficulty_level': difficulty_dims['overall_difficulty'],
+            'query_complexity': difficulty_dims['query_complexity'],
+            'spatial_complexity': difficulty_dims['spatial_complexity'],
+            'schema_complexity': difficulty_dims['schema_complexity'],
+            'complexity_level': difficulty_dims['complexity_level'],
+            'complexity_score': difficulty_dims['complexity_score'],
+            
+            # SQL metadata
             'sql_type': sample.get('sql_type', 'UNKNOWN'),
-            'spatial_function_usage': sample.get('spatial_function_usage', 'UNKNOWN'),
+            'spatial_functions': difficulty_dims['spatial_functions'],
+            'spatial_function_count': difficulty_dims['spatial_function_count'],
+            'function_count': difficulty_dims['function_count'],
+            'join_count': difficulty_dims['join_count'],
+            'table_count': difficulty_dims['table_count'],
+            
             'importance_score': calculate_sample_importance(sample),
             
             'executable': exec_result['success'],
@@ -308,8 +449,15 @@ def save_benchmark(benchmark: List[Dict[str, Any]], output_file: Path):
         'executable_queries': sum(1 for item in benchmark if item.get('executable') is True),
         'failed_queries': sum(1 for item in benchmark if item.get('executable') is False),
         'difficulty_distribution': {},
+        'query_complexity_distribution': {},
+        'spatial_complexity_distribution': {},
+        'schema_complexity_distribution': {},
+        'complexity_level_distribution': {},
         'sql_type_distribution': {},
+        'function_count_distribution': {},
+        'join_count_distribution': {},
         'average_importance': sum(item['importance_score'] for item in benchmark) / len(benchmark) if benchmark else 0,
+        'average_complexity_score': sum(item.get('complexity_score', 0) for item in benchmark) / len(benchmark) if benchmark else 0,
         'evaluation_metrics': {
             'Q2SQL': ['EM (Exact Match)', 'EX (Execution Accuracy)'],
             'QInst2SQL': ['EM (Exact Match)', 'EX (Execution Accuracy)'],
@@ -317,14 +465,33 @@ def save_benchmark(benchmark: List[Dict[str, Any]], output_file: Path):
         }
     }
     
+    # Calculate distributions
     for item in benchmark:
-        diff = item['difficulty_level']
-        sql_type = item['sql_type']
+        diff = item.get('difficulty_level', 'UNKNOWN')
+        sql_type = item.get('sql_type', 'UNKNOWN')
+        query_complexity = item.get('query_complexity', 'UNKNOWN')
+        spatial_complexity = item.get('spatial_complexity', 'UNKNOWN')
+        schema_complexity = item.get('schema_complexity', 'UNKNOWN')
+        complexity_level = item.get('complexity_level', 'UNKNOWN')
+        function_count = item.get('function_count', '0')
+        join_count = item.get('join_count', '0')
         
         metadata['difficulty_distribution'][diff] = \
             metadata['difficulty_distribution'].get(diff, 0) + 1
+        metadata['query_complexity_distribution'][query_complexity] = \
+            metadata['query_complexity_distribution'].get(query_complexity, 0) + 1
+        metadata['spatial_complexity_distribution'][spatial_complexity] = \
+            metadata['spatial_complexity_distribution'].get(spatial_complexity, 0) + 1
+        metadata['schema_complexity_distribution'][schema_complexity] = \
+            metadata['schema_complexity_distribution'].get(schema_complexity, 0) + 1
+        metadata['complexity_level_distribution'][complexity_level] = \
+            metadata['complexity_level_distribution'].get(complexity_level, 0) + 1
         metadata['sql_type_distribution'][sql_type] = \
             metadata['sql_type_distribution'].get(sql_type, 0) + 1
+        metadata['function_count_distribution'][function_count] = \
+            metadata['function_count_distribution'].get(function_count, 0) + 1
+        metadata['join_count_distribution'][join_count] = \
+            metadata['join_count_distribution'].get(join_count, 0) + 1
     
     metadata_file = output_file.with_suffix('.meta.json')
     with open(metadata_file, 'w', encoding='utf-8') as f:

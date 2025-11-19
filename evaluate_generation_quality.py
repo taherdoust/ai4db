@@ -335,6 +335,12 @@ def print_report(results: Dict[str, Any]):
             print(f"    - Increase CTGAN training epochs")
             print(f"    - Improve quality filtering threshold")
             print(f"    - Enhance schema-aware SQL assembly")
+    elif results['stage'] == 3:
+        print(f"\n  Stage 3 (Augmentation) target NoErr rate: >90%")
+        if no_err_rate >= 0.90:
+            print(f"  Status: PASSED - Ready for training")
+        else:
+            print(f"  Status: ACCEPTABLE - Consider filtering low-quality samples")
     
     print("\n" + "="*80)
 
@@ -476,8 +482,8 @@ def main():
         '--stage',
         type=int,
         required=True,
-        choices=[1, 2],
-        help='Dataset stage (1 for rule-based, 2 for CTGAN)'
+        choices=[1, 2, 3],
+        help='Dataset stage (1 for rule-based, 2 for CTGAN, 3 for augmented)'
     )
     
     parser.add_argument(
@@ -529,4 +535,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-

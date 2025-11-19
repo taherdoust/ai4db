@@ -1,7 +1,0 @@
-{
-  "last_processed_idx": 999,
-  "total_augmented_samples": 4282,
-  "timestamp": "2025-10-07T17:37:56.004729",
-  "stage2_file": "training_datasets/stage2_synthetic_dataset_eclab_ctgan.jsonl",
-  "target_multiplier": 10
-}

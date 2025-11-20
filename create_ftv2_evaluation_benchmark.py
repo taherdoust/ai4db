@@ -1129,23 +1129,12 @@ def create_ftv2_benchmark(
         benchmark_item = {
             'benchmark_id': idx,
             'original_id': sample.get('id', f'sample_{idx}'),
-            
-            'question': sample.get('question', ''),
-            'instruction': sample.get('instruction', ''),
-            'sql_postgis': sql_query,
-            
-            'expected_result': exec_result['result'],
-            'expected_row_count': exec_result['row_count'],
-            
-            # Difficulty dimensions (calculated + annotated)
             'difficulty_level': difficulty_level,
             'query_complexity': query_complexity,
             'spatial_complexity': spatial_complexity,
             'schema_complexity': schema_complexity,
             'complexity_level': complexity_level,
             'complexity_score': complexity_score,
-            
-            # SQL metadata
             'sql_type': sample.get('sql_type', 'UNKNOWN'),
             'spatial_functions': difficulty_dims['spatial_functions'],
             'spatial_function_count': difficulty_dims['spatial_function_count'],
@@ -1153,11 +1142,14 @@ def create_ftv2_benchmark(
             'join_count': join_count,
             'table_count': table_count,
             'question_tone': question_tone,
-            
             'importance_score': calculate_sample_importance(sample),
-            
             'executable': exec_result['success'],
             'execution_time': exec_result['execution_time'],
+            'question': sample.get('question', ''),
+            'instruction': sample.get('instruction', ''),
+            'sql_postgis': sql_query,
+            'expected_result': exec_result['result'],
+            'expected_row_count': exec_result['row_count'],
             'error': exec_result['error']
         }
         

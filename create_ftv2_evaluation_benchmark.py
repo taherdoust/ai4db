@@ -1038,6 +1038,28 @@ def remove_limit_clause(sql: str) -> str:
     return sql.strip()
 
 
+def extract_project_id_from_sql(sql: str) -> Optional[str]:
+    """Extract project_id value from SQL WHERE clause."""
+    import re
+    # Match: project_id = 'uuid' or project_id = "uuid"
+    match = re.search(r"project_id\s*=\s*['\"]([^'\"]+)['\"]", sql, re.IGNORECASE)
+    if match:
+        return match.group(1)
+    return None
+
+
+def inject_project_id_in_question(question: str, project_id: str) -> str:
+    """Add project_id to question if not already present."""
+    if not project_id or project_id in question:
+        return question
+    
+    # Add project_id context to question
+    if question.endswith('?'):
+        return f"{question[:-1]} for project '{project_id}'?"
+    else:
+        return f"{question} (project: '{project_id}')"
+
+
 def execute_query(query: str, engine, timeout: int = 30) -> Dict[str, Any]:
     """Execute SQL query and capture results."""
     start_time = time.time()
@@ -1081,7 +1103,8 @@ def execute_query(query: str, engine, timeout: int = 30) -> Dict[str, Any]:
 def create_ftv2_benchmark(
     samples: List[Dict[str, Any]],
     db_uri: str,
-    skip_execution: bool = False
+    skip_execution: bool = False,
+    easy_mode: bool = False
 ) -> List[Dict[str, Any]]:
     """Create FTv2 benchmark with fields for all three task types."""
     print(f"\nCreating FTv2 benchmark from {len(samples)} samples...")
@@ -1111,6 +1134,14 @@ def create_ftv2_benchmark(
         
         # Remove LIMIT clause from ground truth SQL
         sql_query_no_limit = remove_limit_clause(sql_query) if sql_query else ''
+        
+        # Extract project_id from SQL
+        project_id = extract_project_id_from_sql(sql_query_no_limit)
+        
+        # Get question and inject project_id if needed
+        question = sample.get('question', '')
+        if project_id:
+            question = inject_project_id_in_question(question, project_id)
         
         exec_result = {
             'success': None, 
@@ -1160,12 +1191,13 @@ def create_ftv2_benchmark(
             'importance_score': calculate_sample_importance(sample),
             'executable': exec_result['success'],
             'execution_time': exec_result['execution_time'],
-            'question': sample.get('question', ''),
-            'instruction': sample.get('instruction', ''),
+            'question': question,
+            'instruction': sample.get('instruction', '') if not easy_mode else '',
             'sql_postgis': sql_query_no_limit,
             'expected_result': exec_result['result'],
             'expected_row_count': exec_result['row_count'],
-            'error': exec_result['error']
+            'error': exec_result['error'],
+            'project_id': project_id
         }
         
         benchmark.append(benchmark_item)
@@ -1468,16 +1500,15 @@ def main():
     # Override SQL type targets for easy mode
     if args.easy_mode:
         sql_type_targets = {
-            'SIMPLE_SELECT': int(args.size * 0.80),  # 80% SIMPLE_SELECT
+            'SIMPLE_SELECT': int(args.size * 0.90),  # 90% SIMPLE_SELECT (increased from 80%)
             'AGGREGATION': max(int(args.size * 0.05), 1),
-            'SPATIAL_JOIN': max(args.min_spatial_join, 1),
-            'SPATIAL_MEASUREMENT': max(args.min_spatial_measurement, 1),
-            'MULTI_JOIN': max(int(args.size * 0.02), 1),
-            'NESTED_QUERY': max(int(args.size * 0.02), 1),
+            'SPATIAL_JOIN': max(int(args.size * 0.02), 1),
+            'SPATIAL_MEASUREMENT': max(int(args.size * 0.02), 1),
+            'MULTI_JOIN': max(int(args.size * 0.01), 1),
         }
         # Filter to only available types
         sql_type_targets = {k: v for k, v in sql_type_targets.items() if k in available_sql_types}
-        print(f"\nEasy mode SQL type targets: {sql_type_targets}")
+        print(f"\nEasy mode SQL type targets (90% SIMPLE_SELECT): {sql_type_targets}")
     else:
         sql_type_targets = {
             sql_type: max(SQL_TYPE_MIN_DEFAULTS.get(sql_type, 1), 1)
@@ -1536,7 +1567,7 @@ def main():
         print("Error: Unable to generate benchmark meeting distribution criteria. Consider relaxing thresholds or increasing dataset size.")
         sys.exit(1)
     
-    benchmark = create_ftv2_benchmark(benchmark_samples, args.db_uri, args.skip_execution)
+    benchmark = create_ftv2_benchmark(benchmark_samples, args.db_uri, args.skip_execution, args.easy_mode)
     
     save_benchmark(
         benchmark,

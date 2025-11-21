@@ -1,62 +1,62 @@
 {
   "benchmark_version": "FTv2",
-  "benchmark_size": 150,
+  "benchmark_size": 170,
   "tasks_supported": [
     "Q2SQL",
     "QInst2SQL",
     "Q2Inst"
   ],
-  "executable_queries": 150,
+  "executable_queries": 170,
   "failed_queries": 0,
   "difficulty_distribution": {
-    "MEDIUM": 90,
-    "EASY": 60
+    "MEDIUM": 100,
+    "EASY": 70
   },
   "query_complexity_distribution": {
-    "MEDIUM": 90,
-    "EASY": 60
+    "MEDIUM": 100,
+    "EASY": 70
   },
   "spatial_complexity_distribution": {
-    "INTERMEDIATE": 150
+    "INTERMEDIATE": 170
   },
   "schema_complexity_distribution": {
-    "MULTI_SCHEMA": 150
+    "MULTI_SCHEMA": 170
   },
   "complexity_level_distribution": {
-    "B": 70,
-    "A": 80
+    "B": 80,
+    "A": 90
   },
   "sql_type_distribution": {
     "SPATIAL_MEASUREMENT": 4,
-    "MULTI_JOIN": 54,
-    "SIMPLE_SELECT": 80,
+    "MULTI_JOIN": 64,
+    "SIMPLE_SELECT": 90,
     "AGGREGATION": 5,
     "SPATIAL_JOIN": 3,
     "NESTED_QUERY": 4
   },
   "function_count_distribution": {
-    "1": 33,
+    "1": 42,
     "3+": 20,
-    "2": 13,
-    "0": 84
+    "2": 14,
+    "0": 94
   },
   "join_count_distribution": {
-    "1": 66,
-    "0": 84
+    "1": 76,
+    "0": 94
   },
   "question_tone_distribution": {
-    "INTERROGATIVE": 77,
+    "INTERROGATIVE": 92,
     "SPATIAL_SPECIFIC": 16,
-    "DESCRIPTIVE": 37,
-    "ANALYTICAL": 8,
+    "DESCRIPTIVE": 41,
+    "ANALYTICAL": 9,
     "DIRECT": 10,
     "AGGREGATE": 2,
     "__PRIMARY_TONE__": "INTERROGATIVE",
-    "__PRIMARY_COUNT__": 77,
-    "__VARIANT_COUNT__": 73
+    "__PRIMARY_COUNT__": 92,
+    "__VARIANT_COUNT__": 78
   },
-  "average_importance": 1.2236410524444434,
-  "average_complexity_score": 1.3533333333333333,
+  "average_importance": 1.2154855152941166,
+  "average_complexity_score": 1.3411764705882352,
   "evaluation_metrics": {
     "Q2SQL": [
       "EM (Exact Match)",
@@ -72,6 +72,6 @@
       "Manual Review"
     ]
   },
-  "sampling_attempts": 6,
-  "final_candidate_size": 150
+  "sampling_attempts": 8,
+  "final_candidate_size": 170
 }

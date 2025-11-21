@@ -1,0 +1,77 @@
+{
+  "benchmark_version": "FTv2",
+  "benchmark_size": 150,
+  "tasks_supported": [
+    "Q2SQL",
+    "QInst2SQL",
+    "Q2Inst"
+  ],
+  "executable_queries": 150,
+  "failed_queries": 0,
+  "difficulty_distribution": {
+    "MEDIUM": 90,
+    "EASY": 60
+  },
+  "query_complexity_distribution": {
+    "MEDIUM": 90,
+    "EASY": 60
+  },
+  "spatial_complexity_distribution": {
+    "INTERMEDIATE": 150
+  },
+  "schema_complexity_distribution": {
+    "MULTI_SCHEMA": 150
+  },
+  "complexity_level_distribution": {
+    "B": 70,
+    "A": 80
+  },
+  "sql_type_distribution": {
+    "SPATIAL_MEASUREMENT": 4,
+    "MULTI_JOIN": 54,
+    "SIMPLE_SELECT": 80,
+    "AGGREGATION": 5,
+    "SPATIAL_JOIN": 3,
+    "NESTED_QUERY": 4
+  },
+  "function_count_distribution": {
+    "1": 33,
+    "3+": 20,
+    "2": 13,
+    "0": 84
+  },
+  "join_count_distribution": {
+    "1": 66,
+    "0": 84
+  },
+  "question_tone_distribution": {
+    "INTERROGATIVE": 77,
+    "SPATIAL_SPECIFIC": 16,
+    "DESCRIPTIVE": 37,
+    "ANALYTICAL": 8,
+    "DIRECT": 10,
+    "AGGREGATE": 2,
+    "__PRIMARY_TONE__": "INTERROGATIVE",
+    "__PRIMARY_COUNT__": 77,
+    "__VARIANT_COUNT__": 73
+  },
+  "average_importance": 1.2236410524444434,
+  "average_complexity_score": 1.3533333333333333,
+  "evaluation_metrics": {
+    "Q2SQL": [
+      "EM (Exact Match)",
+      "EX (Execution Accuracy)"
+    ],
+    "QInst2SQL": [
+      "EM (Exact Match)",
+      "EX (Execution Accuracy)"
+    ],
+    "Q2Inst": [
+      "Semantic Similarity",
+      "Downstream SQL Accuracy",
+      "Manual Review"
+    ]
+  },
+  "sampling_attempts": 6,
+  "final_candidate_size": 150
+}

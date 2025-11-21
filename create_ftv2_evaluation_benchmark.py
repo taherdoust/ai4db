@@ -1029,14 +1029,26 @@ def convert_to_json_serializable(obj):
         return obj
 
 
+def remove_limit_clause(sql: str) -> str:
+    """Remove LIMIT clause from SQL query to get full result set."""
+    import re
+    # Remove LIMIT clause (handles various formats)
+    sql = re.sub(r'\s+LIMIT\s+\d+\s*;?\s*$', '', sql, flags=re.IGNORECASE)
+    sql = re.sub(r'\s+LIMIT\s+\d+\s+', ' ', sql, flags=re.IGNORECASE)
+    return sql.strip()
+
+
 def execute_query(query: str, engine, timeout: int = 30) -> Dict[str, Any]:
     """Execute SQL query and capture results."""
     start_time = time.time()
     
+    # Remove LIMIT clause to get full result set for ground truth
+    query_no_limit = remove_limit_clause(query)
+    
     try:
         with engine.connect() as conn:
             conn.execute(text(f"SET statement_timeout = {timeout * 1000};"))
-            result = conn.execute(text(query))
+            result = conn.execute(text(query_no_limit))
             rows = result.fetchall()
             
             # Convert rows to JSON-serializable format
@@ -1097,6 +1109,9 @@ def create_ftv2_benchmark(
         
         sql_query = sample.get('sql_postgis', '')
         
+        # Remove LIMIT clause from ground truth SQL
+        sql_query_no_limit = remove_limit_clause(sql_query) if sql_query else ''
+        
         exec_result = {
             'success': None, 
             'result': None, 
@@ -1105,8 +1120,8 @@ def create_ftv2_benchmark(
             'error': None
         }
         
-        if not skip_execution and sql_query and engine:
-            exec_result = execute_query(sql_query, engine, timeout=30)
+        if not skip_execution and sql_query_no_limit and engine:
+            exec_result = execute_query(sql_query_no_limit, engine, timeout=30)
             if exec_result['success']:
                 executed += 1
             else:
@@ -1147,7 +1162,7 @@ def create_ftv2_benchmark(
             'execution_time': exec_result['execution_time'],
             'question': sample.get('question', ''),
             'instruction': sample.get('instruction', ''),
-            'sql_postgis': sql_query,
+            'sql_postgis': sql_query_no_limit,
             'expected_result': exec_result['result'],
             'expected_row_count': exec_result['row_count'],
             'error': exec_result['error']
@@ -1384,7 +1399,37 @@ def main():
         help='Allowed deviation for ratio-based targets (default: 0.08)'
     )
     
+    parser.add_argument(
+        '--easy_mode',
+        action='store_true',
+        help='Generate easy benchmark (80%% SIMPLE_SELECT, low complexity, adds "_easy" suffix to output)'
+    )
+    
     args = parser.parse_args()
+    
+    # Apply easy mode defaults
+    if args.easy_mode:
+        print("\n" + "="*70)
+        print("EASY MODE ENABLED")
+        print("="*70)
+        print("Adjusting parameters for easy benchmark generation:")
+        print("  - Stratifying by sql_type")
+        print("  - Min complexity score: 0.5 (was {})".format(args.min_complexity_score))
+        print("  - Min spatial join: 3 (was {})".format(args.min_spatial_join))
+        print("  - Min spatial measurement: 3 (was {})".format(args.min_spatial_measurement))
+        print("  - Adding '_easy' suffix to output filename")
+        
+        args.stratify_by = 'sql_type'
+        args.min_complexity_score = 0.5
+        args.min_spatial_join = 3
+        args.min_spatial_measurement = 3
+        
+        # Add "_easy" suffix to output filename
+        if not str(args.output).endswith('_easy.jsonl'):
+            output_stem = args.output.stem
+            if not output_stem.endswith('_easy'):
+                args.output = args.output.parent / f"{output_stem}_easy{args.output.suffix}"
+    
     args.primary_tone_ratio = min(max(args.primary_tone_ratio, 0.0), 1.0)
     args.max_single_schema_ratio = min(max(args.max_single_schema_ratio, 0.0), 1.0)
     args.size_increment = max(1, args.size_increment)
@@ -1419,10 +1464,26 @@ def main():
         args.size = len(quality_filtered)
     
     available_sql_types = {str(s.get('sql_type', 'UNKNOWN')).upper() for s in quality_filtered}
-    sql_type_targets = {
-        sql_type: max(SQL_TYPE_MIN_DEFAULTS.get(sql_type, 1), 1)
-        for sql_type in available_sql_types
-    }
+    
+    # Override SQL type targets for easy mode
+    if args.easy_mode:
+        sql_type_targets = {
+            'SIMPLE_SELECT': int(args.size * 0.80),  # 80% SIMPLE_SELECT
+            'AGGREGATION': max(int(args.size * 0.05), 1),
+            'SPATIAL_JOIN': max(args.min_spatial_join, 1),
+            'SPATIAL_MEASUREMENT': max(args.min_spatial_measurement, 1),
+            'MULTI_JOIN': max(int(args.size * 0.02), 1),
+            'NESTED_QUERY': max(int(args.size * 0.02), 1),
+        }
+        # Filter to only available types
+        sql_type_targets = {k: v for k, v in sql_type_targets.items() if k in available_sql_types}
+        print(f"\nEasy mode SQL type targets: {sql_type_targets}")
+    else:
+        sql_type_targets = {
+            sql_type: max(SQL_TYPE_MIN_DEFAULTS.get(sql_type, 1), 1)
+            for sql_type in available_sql_types
+        }
+    
     if args.min_spatial_join:
         if 'SPATIAL_JOIN' in sql_type_targets:
             sql_type_targets['SPATIAL_JOIN'] = max(sql_type_targets['SPATIAL_JOIN'], args.min_spatial_join)

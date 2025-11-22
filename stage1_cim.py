@@ -526,6 +526,56 @@ CIM_PARAMETERS = {
     "overlap_thresholds": [10, 20, 30, 40, 50, 60, 70, 80]
 }
 
+# ============================================================================
+# LIMIT/ORDER BY DISTRIBUTION STRATEGY (PHASE 4)
+# ============================================================================
+
+LIMIT_ORDER_DISTRIBUTION = {
+    # 85% - No LIMIT, No ORDER BY (typical user behavior)
+    "FULL_RESULTS": {
+        "ratio": 0.85,
+        "description": "User wants all results for analysis"
+    },
+    
+    # 7% - ORDER BY only (user wants sorted results)
+    "ORDERED_ONLY": {
+        "ratio": 0.07,
+        "description": "User wants sorted data without limiting"
+    },
+    
+    # 8% - LIMIT + ORDER BY (user wants top N)
+    "TOP_N": {
+        "ratio": 0.08,
+        "description": "User explicitly wants top N results"
+    }
+}
+
+def determine_limit_strategy(template_id: str, variation_idx: int) -> str:
+    """Determine LIMIT/ORDER BY strategy for this variation (85/7/8 distribution)"""
+    
+    # Deterministic selection based on template + variation
+    selector = hash(f"{template_id}_{variation_idx}") % 100
+    
+    if selector < 85:
+        return "FULL_RESULTS"
+    elif selector < 92:
+        return "ORDERED_ONLY"
+    else:
+        return "TOP_N"
+
+def remove_limit_and_order(sql: str) -> str:
+    """Remove LIMIT and ORDER BY clauses from SQL"""
+    # Remove ORDER BY clause
+    sql = re.sub(r'\s+ORDER BY[^;]*?(?=LIMIT|$)', '', sql, flags=re.IGNORECASE)
+    # Remove LIMIT clause
+    sql = re.sub(r'\s+LIMIT\s+\d+', '', sql, flags=re.IGNORECASE)
+    return sql.strip().rstrip(';') + ';'
+
+def remove_limit_only(sql: str) -> str:
+    """Remove LIMIT but keep ORDER BY"""
+    sql = re.sub(r'\s+LIMIT\s+\d+', '', sql, flags=re.IGNORECASE)
+    return sql.strip().rstrip(';') + ';'
+
 def generate_realistic_values() -> Dict[str, any]:
     """Generate realistic parameter values for CIM database queries using actual database data"""
     
@@ -579,7 +629,7 @@ def generate_realistic_values() -> Dict[str, any]:
         "lon": round(random.uniform(7.0, 18.0), 6),
         "lat": round(random.uniform(36.0, 47.0), 6),
         
-        # Query limits
+        # Query limits (only used for TOP_N strategy - 8% of samples)
         "limit": random.choice([10, 25, 50, 100])
     }
 
@@ -1961,9 +2011,10 @@ def generate_stage1_cim_dataset(
     templates = generate_cim_templates()
     print(f"      Total templates: {len(templates)}")
     
-    # Create variations
-    print(f"\n[2/5] Creating template variations...")
+    # Create variations with LIMIT/ORDER BY strategy
+    print(f"\n[2/5] Creating template variations with LIMIT/ORDER BY distribution (85/7/8)...")
     dataset = []
+    limit_strategy_counts = {"FULL_RESULTS": 0, "ORDERED_ONLY": 0, "TOP_N": 0}
     
     for template_id, sql_template, nl_desc, tags in templates:
         # Determine complexity from template_id
@@ -1979,6 +2030,26 @@ def generate_stage1_cim_dataset(
                 
                 # Apply parameter substitution to natural language description
                 enhanced_desc = nl_desc.format(**values)
+                
+                # PHASE 4: Apply LIMIT/ORDER BY strategy (85% no LIMIT, 7% ORDER only, 8% LIMIT+ORDER)
+                limit_strategy = determine_limit_strategy(template_id, i)
+                limit_strategy_counts[limit_strategy] += 1
+                
+                if limit_strategy == "FULL_RESULTS":
+                    # Remove LIMIT and ORDER BY
+                    postgis_sql = remove_limit_and_order(postgis_sql)
+                    enhanced_desc = enhanced_desc.replace(", limit to {limit} results", "")
+                    enhanced_desc = enhanced_desc.replace("limit to {limit} results", "")
+                    enhanced_desc = enhanced_desc.replace(", ordered by", ", showing")
+                    enhanced_desc = enhanced_desc.replace("ordered by", "showing")
+                
+                elif limit_strategy == "ORDERED_ONLY":
+                    # Keep ORDER BY, remove LIMIT
+                    postgis_sql = remove_limit_only(postgis_sql)
+                    enhanced_desc = enhanced_desc.replace(", limit to {limit} results", "")
+                    enhanced_desc = enhanced_desc.replace("limit to {limit} results", "")
+                
+                # TOP_N keeps both LIMIT and ORDER BY as-is
                 
                 # Extract evidence
                 evidence = extract_evidence(postgis_sql, f"{template_id}_var_{i+1}", tags)
@@ -2004,6 +2075,10 @@ def generate_stage1_cim_dataset(
                 continue
     
     print(f"      Generated {len(dataset)} SQL pairs")
+    print(f"      LIMIT/ORDER BY distribution:")
+    for strategy, count in limit_strategy_counts.items():
+        percentage = count / len(dataset) * 100 if dataset else 0
+        print(f"        {strategy:15s}: {count:5,} ({percentage:5.1f}%)")
     
     # Create enhanced samples with comprehensive metadata
     print(f"\n[3/5] Creating enhanced samples with comprehensive metadata...")
@@ -2020,6 +2095,11 @@ def generate_stage1_cim_dataset(
             database_id=1,
             include_results=False
         )
+        
+        # Add LIMIT/ORDER BY metadata (PHASE 4)
+        enhanced_sample['has_limit'] = 'LIMIT' in pair.postgis_sql.upper()
+        enhanced_sample['has_order_by'] = 'ORDER BY' in pair.postgis_sql.upper()
+        enhanced_sample['limit_strategy'] = determine_limit_strategy(pair.template_id, i)
         
         enhanced_samples.append(enhanced_sample)
         

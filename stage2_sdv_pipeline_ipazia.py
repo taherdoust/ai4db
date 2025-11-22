@@ -193,11 +193,11 @@ def extract_features(stage1_samples: List[Dict]) -> pd.DataFrame:
     """
     Extract features from Stage 1 samples for CTGAN training
     
-    Features (13 total):
+    Features (15 total - PHASE 4 ENHANCED):
     - 7 numerical: cte_count, join_count, subquery_count, spatial_function_count,
                    table_count, complexity_score, schema_count
-    - 6 categorical: sql_type, difficulty_level, schema_complexity, usage_frequency,
-                    question_tone, primary_function_category
+    - 8 categorical: sql_type, difficulty_level, schema_complexity, usage_frequency,
+                    question_tone, primary_function_category, limit_strategy, has_where_clause
     """
     
     records = []
@@ -222,6 +222,10 @@ def extract_features(stage1_samples: List[Dict]) -> pd.DataFrame:
         schema_complexity = sample['difficulty']['schema_complexity']
         usage_frequency = sample['usage_frequency']
         question_tone = sample['question_tone']
+        
+        # PHASE 4: New features for LIMIT/ORDER BY distribution
+        limit_strategy = sample.get('limit_strategy', 'FULL_RESULTS')
+        has_where_clause = 'YES' if 'WHERE' in sql_upper else 'NO'
         
         # Determine primary function category from spatial_function_details
         primary_category = "measurement"  # default
@@ -277,7 +281,11 @@ def extract_features(stage1_samples: List[Dict]) -> pd.DataFrame:
             'schema_complexity': schema_complexity,
             'usage_frequency': usage_frequency,
             'question_tone': question_tone,
-            'primary_function_category': primary_category
+            'primary_function_category': primary_category,
+            
+            # PHASE 4: New categorical features
+            'limit_strategy': limit_strategy,
+            'has_where_clause': has_where_clause
         }
         
         records.append(record)

@@ -417,7 +417,9 @@ class OpenRouterAugmenter:
         
         system_prompt = """You are an expert in spatial databases and PostGIS SQL. Your task is to generate natural language questions AND corresponding INSTRUCTIONAL DECOMPOSITIONS for spatial SQL queries. 
 
-The instructions should teach a small language model HOW to think through the problem step-by-step, not just say "convert to SQL". Break down the spatial reasoning process."""
+The instructions should teach a small language model HOW to think through the problem step-by-step, not just say "convert to SQL". Break down the spatial reasoning process.
+
+CRITICAL: Most CIM Wizard users want ALL results, not limited subsets. Only mention LIMIT when the question explicitly asks for "top N" or "first N" results. Otherwise, omit LIMIT entirely."""
         
         prompt = f"""Generate {num} diverse (question, instruction) pairs for this spatial SQL query.
 
@@ -463,13 +465,16 @@ Guidelines for QUESTIONS:
 
 Guidelines for INSTRUCTIONS (VERY IMPORTANT):
 - Break down the task into clear, detailed steps (20-1200 characters)
-- Identify which tables to use and their schemas
+- Identify which tables to use and their schemas (exact names: cim_vector.cim_wizard_building, etc.)
 - Identify which geometry columns to access
 - Specify which PostGIS spatial functions to apply and why
 - Explain the reasoning for JOIN conditions or filters
 - For complex queries, provide comprehensive step-by-step decomposition
-- Example good instruction: "First, identify the buildings table (cim_vector.building) with geometry column 'geom'. Then, find the census zones (cim_census.zones) that spatially intersect using ST_Intersects. Apply ST_Area to measure the intersection area. Filter by project_id for the target project. Group results by zone and calculate aggregate statistics."
-- Example bad instruction: "Convert this question to SQL" (too simple!)
+- AVOID mentioning LIMIT unless question explicitly asks for "top N" or "first N"
+- Most users want ALL results, not limited subsets
+- Only mention ORDER BY if results need specific ordering
+- Example good instruction: "First, identify the buildings table (cim_vector.cim_wizard_building) with geometry column 'building_geometry'. Then, find the census zones (cim_census.censusgeo) that spatially intersect using ST_Intersects. Apply ST_Area to measure the intersection area. Filter by project_id for the target project. Group results by zone and calculate aggregate statistics."
+- Example bad instruction: "Convert this question to SQL and limit results to 100" (assumes LIMIT when not needed!)
 """
         
         try:

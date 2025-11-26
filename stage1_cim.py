@@ -372,20 +372,27 @@ SPATIAL_FUNCTIONS = {
 }
 
 # ============================================================================
-# SQL TAXONOMY DEFINITIONS
+# SQL TAXONOMY DEFINITIONS WITH FREQUENCY-BASED DISTRIBUTION
 # ============================================================================
 
-SQL_TYPES = {
-    "SIMPLE_SELECT": "Single table selection with optional WHERE",
-    "SPATIAL_JOIN": "Join with spatial predicate",
-    "AGGREGATION": "GROUP BY with aggregate functions",
-    "NESTED_QUERY": "Subquery or CTE",
-    "SPATIAL_MEASUREMENT": "Measurement functions (ST_Area, ST_Distance, ST_Length)",
-    "SPATIAL_PROCESSING": "Geometry processing (ST_Buffer, ST_Union, ST_Intersection)",
-    "SPATIAL_CLUSTERING": "Spatial clustering (ST_ClusterDBSCAN, ST_ClusterKMeans)",
-    "RASTER_VECTOR": "Raster-vector integration",
-    "MULTI_JOIN": "Multiple table joins (2+ tables)",
-    "WINDOW_FUNCTION": "Window functions (ROW_NUMBER, RANK, PARTITION BY)"
+# Frequency-based distribution for CIM Wizard domain
+SQL_TYPE_FREQUENCY = {
+    "SIMPLE_SELECT": {"frequency": 0.45, "description": "Single table selection with optional WHERE"},
+    "AGGREGATION": {"frequency": 0.25, "description": "GROUP BY with aggregate functions"},
+    "SPATIAL_JOIN": {"frequency": 0.15, "description": "Join with spatial predicate"},
+    "SPATIAL_MEASUREMENT": {"frequency": 0.08, "description": "Measurement functions (ST_Area, ST_Distance)"},
+    "MULTI_JOIN": {"frequency": 0.04, "description": "Multiple table joins (2+ tables)"},
+    "NESTED_QUERY": {"frequency": 0.02, "description": "Subquery or CTE"},
+    "SPATIAL_CLUSTERING": {"frequency": 0.005, "description": "Spatial clustering (DBSCAN, KMeans)"},
+    "RASTER_VECTOR": {"frequency": 0.005, "description": "Raster-vector integration"}
+}
+
+# Schema frequency distribution for CIM Wizard
+SCHEMA_FREQUENCY = {
+    "SINGLE_SCHEMA_CIM_VECTOR": {"frequency": 0.70, "description": "Single schema cim_vector only"},
+    "MULTI_SCHEMA_WITH_CIM_VECTOR": {"frequency": 0.20, "description": "cim_vector + other schemas"},
+    "SINGLE_SCHEMA_OTHER": {"frequency": 0.08, "description": "Single non-vector schema"},
+    "MULTI_SCHEMA_WITHOUT_CIM_VECTOR": {"frequency": 0.02, "description": "Multiple schemas without cim_vector"}
 }
 
 QUESTION_TONES = {
@@ -643,10 +650,10 @@ class SqlPair:
     template_id: str
     complexity: str  # A, B, C
     postgis_sql: str
-    spatialite_sql: str
+    spatialite_sql: str  # ?
     natural_language_desc: str
     tags: Set[str]
-    evidence: Dict[str, any]
+    evidence: Dict[str, any]   # ?
 
 # ============================================================================
 # CLASSIFICATION FUNCTIONS
@@ -775,8 +782,8 @@ def classify_question_tone(natural_language: str) -> str:
     
     return "INTERROGATIVE"
 
-def calculate_difficulty_dimensions(sql: str, metadata: Dict) -> Dict[str, str]:
-    """Calculate difficulty across all dimensions"""
+def calculate_complexity_dimensions(sql: str, metadata: Dict) -> Dict[str, any]:
+    """Calculate comprehensive complexity dimensions for the query"""
     sql_upper = sql.upper()
     
     # Extract structural components
@@ -785,91 +792,141 @@ def calculate_difficulty_dimensions(sql: str, metadata: Dict) -> Dict[str, str]:
     subquery_count = sql.count('(SELECT')
     spatial_func_count = len(metadata.get('spatial_functions', []))
     table_count = len(metadata.get('tables', []))
+    schemas = metadata.get('schemas', [])
+    schema_count = len(set(schemas))
     
-    # Query complexity (no EXPERT level)
-    complexity_score = 0
+    # 1. SQL Complexity (structural complexity)
+    sql_complexity_score = 0
     if cte_count >= 2:
-        complexity_score += 2
+        sql_complexity_score += 3
     elif cte_count == 1:
-        complexity_score += 1
+        sql_complexity_score += 2
     
-    if join_count >= 2:
-        complexity_score += 2
+    if join_count >= 3:
+        sql_complexity_score += 3
+    elif join_count == 2:
+        sql_complexity_score += 2
     elif join_count == 1:
-        complexity_score += 1
+        sql_complexity_score += 1
     
     if subquery_count >= 2:
-        complexity_score += 2
+        sql_complexity_score += 2
     elif subquery_count == 1:
-        complexity_score += 1
+        sql_complexity_score += 1
     
     if 'PARTITION BY' in sql_upper or 'ROW_NUMBER' in sql_upper:
-        complexity_score += 2
+        sql_complexity_score += 2
     
-    # Map to EASY, MEDIUM, HARD (no EXPERT)
-    if complexity_score >= 5:
-        query_complexity = "HARD"
-    elif complexity_score >= 3:
-        query_complexity = "MEDIUM"
+    # SQL complexity level
+    if sql_complexity_score >= 6:
+        sql_complexity = "COMPLEX"
+    elif sql_complexity_score >= 3:
+        sql_complexity = "INTERMEDIATE"
     else:
-        query_complexity = "EASY"
+        sql_complexity = "SIMPLE"
     
-    # Spatial complexity
-    advanced_spatial = ['ST_CLUSTER', 'ST_SUMMARYSTATS', 'ST_VALUE']
-    intermediate_spatial = ['ST_BUFFER', 'ST_TRANSFORM', 'ST_UNION', 'ST_INTERSECTION']
+    # 2. Spatial SQL Complexity
+    advanced_spatial = ['ST_CLUSTERDBSCAN', 'ST_CLUSTERKMEANS', 'ST_SUMMARYSTATS', 'ST_VALUE', 'ST_CLIP']
+    intermediate_spatial = ['ST_BUFFER', 'ST_TRANSFORM', 'ST_UNION', 'ST_INTERSECTION', 'ST_DIFFERENCE']
+    basic_spatial = ['ST_AREA', 'ST_DISTANCE', 'ST_WITHIN', 'ST_INTERSECTS', 'ST_CONTAINS']
     
-    if any(func in sql_upper for func in advanced_spatial):
-        spatial_complexity = "ADVANCED"
-    elif any(func in sql_upper for func in intermediate_spatial) or spatial_func_count >= 2:
-        spatial_complexity = "INTERMEDIATE"
+    spatial_complexity_score = 0
+    for func in metadata.get('spatial_functions', []):
+        if func.upper() in advanced_spatial:
+            spatial_complexity_score += 3
+        elif func.upper() in intermediate_spatial:
+            spatial_complexity_score += 2
+        elif func.upper() in basic_spatial:
+            spatial_complexity_score += 1
+    
+    if spatial_complexity_score >= 5:
+        spatial_sql_complexity = "ADVANCED"
+    elif spatial_complexity_score >= 2:
+        spatial_sql_complexity = "INTERMEDIATE"
+    elif spatial_complexity_score > 0:
+        spatial_sql_complexity = "BASIC"
     else:
-        spatial_complexity = "BASIC"
+        spatial_sql_complexity = "NONE"
     
-    # Schema complexity
-    schema_count = len(set(table.split('.')[0] for table in metadata.get('tables', []) if '.' in table))
-    if schema_count >= 2:
-        schema_complexity = "MULTI_SCHEMA"
-    elif table_count >= 2:
-        schema_complexity = "SINGLE_SCHEMA"
+    # 3. Schema Complexity (categorized)
+    if 'cim_vector' in schemas:
+        if schema_count == 1:
+            schema_complexity = "SINGLE_SCHEMA_CIM_VECTOR"
+        else:
+            schema_complexity = "MULTI_SCHEMA_WITH_CIM_VECTOR"
     else:
-        schema_complexity = "SINGLE_TABLE"
+        if schema_count == 1:
+            schema_complexity = "SINGLE_SCHEMA_OTHER"
+        else:
+            schema_complexity = "MULTI_SCHEMA_WITHOUT_CIM_VECTOR"
     
-    # Function count: 1, 2, 3+
-    if spatial_func_count >= 3:
-        function_count = "3+"
-    elif spatial_func_count == 2:
-        function_count = "2"
+    # 4. SQL Frequency (how common this SQL pattern is)
+    sql_type = classify_sql_type(sql, metadata)
+    sql_frequency = SQL_TYPE_FREQUENCY.get(sql_type, {}).get("frequency", 0.01)
+    if sql_frequency >= 0.20:
+        sql_frequency_category = "VERY_HIGH"
+    elif sql_frequency >= 0.10:
+        sql_frequency_category = "HIGH"
+    elif sql_frequency >= 0.05:
+        sql_frequency_category = "MEDIUM"
+    elif sql_frequency >= 0.01:
+        sql_frequency_category = "LOW"
     else:
-        function_count = "1"
+        sql_frequency_category = "VERY_LOW"
     
-    # Join count: 0, 1, 2+
-    if join_count >= 2:
-        join_count_cat = "2+"
-    elif join_count == 1:
-        join_count_cat = "1"
+    # 5. Spatial Function Frequency
+    spatial_funcs = metadata.get('spatial_functions', [])
+    if not spatial_funcs:
+        spatial_frequency = "NONE"
     else:
-        join_count_cat = "0"
+        # Check for most common spatial functions
+        common_spatial = ['ST_AREA', 'ST_INTERSECTS', 'ST_WITHIN', 'ST_DISTANCE', 'ST_CONTAINS']
+        if all(f.upper() in common_spatial for f in spatial_funcs):
+            spatial_frequency = "VERY_HIGH"
+        elif any(f.upper() in common_spatial for f in spatial_funcs):
+            spatial_frequency = "HIGH"
+        elif any(f.upper() in ['ST_BUFFER', 'ST_UNION', 'ST_TRANSFORM'] for f in spatial_funcs):
+            spatial_frequency = "MEDIUM"
+        elif any('CLUSTER' in f.upper() for f in spatial_funcs):
+            spatial_frequency = "LOW"
+        else:
+            spatial_frequency = "VERY_LOW"
     
-    # Derive overall complexity level (A, B, C)
-    # A: Easy queries, basic spatial, single table/schema
-    # B: Medium queries, intermediate spatial, joins
-    # C: Hard queries, advanced spatial, multi-schema
-    if query_complexity == "HARD" or spatial_complexity == "ADVANCED" or schema_complexity == "MULTI_SCHEMA":
-        overall_complexity = "C"
-    elif query_complexity == "MEDIUM" or spatial_complexity == "INTERMEDIATE" or join_count >= 1:
-        overall_complexity = "B"
+    # 6. Schema Frequency (how common this schema pattern is)
+    schema_freq = SCHEMA_FREQUENCY.get(schema_complexity, {}).get("frequency", 0.01)
+    if schema_freq >= 0.50:
+        schema_frequency = "VERY_HIGH"
+    elif schema_freq >= 0.20:
+        schema_frequency = "HIGH"
+    elif schema_freq >= 0.10:
+        schema_frequency = "MEDIUM"
+    elif schema_freq >= 0.05:
+        schema_frequency = "LOW"
     else:
-        overall_complexity = "A"
+        schema_frequency = "VERY_LOW"
     
     return {
-        "query_complexity": query_complexity,
-        "spatial_complexity": spatial_complexity,
+        # Core complexity dimensions
+        "sql_complexity": sql_complexity,
+        "sql_complexity_score": sql_complexity_score,
+        "spatial_sql_complexity": spatial_sql_complexity,
+        "spatial_complexity_score": spatial_complexity_score,
         "schema_complexity": schema_complexity,
-        "function_count": function_count,
-        "join_count": join_count_cat,
-        "overall_difficulty": query_complexity,
-        "complexity_level": overall_complexity,
-        "complexity_score": complexity_score
+        
+        # Frequency dimensions
+        "sql_frequency": sql_frequency_category,
+        "sql_frequency_value": sql_frequency,
+        "spatial_frequency": spatial_frequency,
+        "schema_frequency": schema_frequency,
+        "schema_frequency_value": schema_freq,
+        
+        # Counts for detailed analysis
+        "join_count": join_count,
+        "table_count": table_count,
+        "schema_count": schema_count,
+        "function_count": spatial_func_count,
+        "cte_count": cte_count,
+        "subquery_count": subquery_count
     }
 
 def extract_evidence(sql: str, template_id: str, tags: Set[str]) -> Dict[str, any]:
@@ -953,9 +1010,9 @@ WHERE bp.project_id = '{project_id}'
   AND bp.scenario_id = '{scenario_id}'
   AND bp.type = '{building_type}'
   AND public.ST_Area(b.building_geometry) > {min_area}
-LIMIT {limit};
+;
         """.strip(),
-        "Find {building_type} buildings with area greater than {min_area} square meters in project {project_id} scenario {scenario_id}, limit to {limit} results",
+        "Find {building_type} buildings with area greater than {min_area} square meters in project {project_id} scenario {scenario_id}",
         {"building", "area_filter", "type_filter", "basic"}
     ))
     
@@ -966,9 +1023,9 @@ LIMIT {limit};
 SELECT ps.project_name, ps.scenario_name, public.ST_Area(ps.project_boundary) as project_area_sqm
 FROM cim_vector.cim_wizard_project_scenario ps
 WHERE public.ST_Intersects(ps.project_boundary, public.ST_SetSRID(public.ST_MakePoint({lon}, {lat}), {srid}))
-LIMIT {limit};
+;
         """.strip(),
-        "Find project scenarios that contain the geographic point at longitude {lon} latitude {lat} with SRID {srid}, limit to {limit} results",
+        "Find project scenarios that contain the geographic point at longitude {lon} latitude {lat} with SRID {srid}",
         {"project", "point_in_polygon", "basic"}
     ))
     
@@ -985,9 +1042,9 @@ SELECT gb.bus_id, gb.bus_name, gb.voltage_kv, public.ST_X(gb.geometry) as lon, p
 FROM cim_network.network_buses gb
 WHERE gb.voltage_kv >= {voltage_kv}
   AND gb.in_service = true
-LIMIT {limit};
+;
         """.strip(),
-        "Find active grid buses with voltage at or above {voltage_kv} kV, limit to {limit} results",
+        "Find active grid buses with voltage at or above {voltage_kv} kV",
         {"grid", "voltage_filter", "basic"}
     ))
     
@@ -1001,9 +1058,9 @@ SELECT c.sez2011, c.p1 as total_population,
 FROM cim_census.censusgeo c
 WHERE c.p1 >= {min_population}
 ORDER BY c.p1 DESC
-LIMIT {limit};
+;
         """.strip(),
-        "Analyze population distribution by gender in census areas with minimum population of {min_population}, ordered by total population descending, limit to {limit} results",
+        "Analyze population distribution by gender in census areas with minimum population of {min_population}, ordered by total population descending",
         {"census", "demographics", "basic"}
     ))
     
@@ -1021,9 +1078,9 @@ WHERE bp.project_id = '{project_id}'
   AND bp.scenario_id = '{scenario_id}'
   AND bp.height >= {min_height}
 ORDER BY bp.height DESC
-LIMIT {limit};
+;
         """.strip(),
-        "Retrieve building heights of at least {min_height} meters from properties for project {project_id} scenario {scenario_id}, ordered by height descending, limit to {limit} results",
+        "Retrieve building heights of at least {min_height} meters from properties for project {project_id} scenario {scenario_id}, ordered by height descending",
         {"building", "height", "properties", "basic"}
     ))
     
@@ -1038,9 +1095,9 @@ JOIN cim_vector.cim_wizard_building_properties bp ON b.building_id = bp.building
 WHERE bp.project_id = '{project_id}' 
   AND bp.scenario_id = '{scenario_id}'
 ORDER BY distance_m ASC
-LIMIT {limit};
+;
         """.strip(),
-        "Calculate distance from buildings in project {project_id} scenario {scenario_id} to the point at longitude {lon} latitude {lat} in SRID 4326, ordered by distance ascending, limit to {limit} results",
+        "Calculate distance from buildings in project {project_id} scenario {scenario_id} to the point at longitude {lon} latitude {lat} in SRID 4326, ordered by distance ascending",
         {"building", "distance", "measurement", "basic"}
     ))
     
@@ -1055,9 +1112,9 @@ JOIN cim_vector.cim_wizard_project_scenario ps ON bp.project_id = ps.project_id 
 WHERE ps.project_id = '{project_id}'
   AND ps.scenario_id = '{scenario_id}'
   AND public.ST_Intersects(b.building_geometry, ps.project_boundary)
-LIMIT {limit};
+;
         """.strip(),
-        "Find buildings that intersect with the boundary of project {project_id} scenario {scenario_id}, limit to {limit} results",
+        "Find buildings that intersect with the boundary of project {project_id} scenario {scenario_id}",
         {"building", "project", "spatial_predicate", "basic"}
     ))
     
@@ -1088,9 +1145,9 @@ WHERE bp.project_id = '{project_id}'
   AND bp.scenario_id = '{scenario_id}'
   AND bp.area BETWEEN {min_area} AND {max_area}
 ORDER BY bp.area DESC
-LIMIT {limit};
+;
         """.strip(),
-        "Find buildings with area between {min_area} and {max_area} square meters in project {project_id} scenario {scenario_id}, ordered by area descending, limit to {limit} results",
+        "Find buildings with area between {min_area} and {max_area} square meters in project {project_id} scenario {scenario_id}, ordered by area descending",
         {"building", "area_filter", "range", "basic"}
     ))
     
@@ -1121,9 +1178,9 @@ WHERE bp.project_id = '{project_id}'
   AND bp.scenario_id = '{scenario_id}'
   AND bp.const_year >= {year}
 ORDER BY bp.const_year DESC
-LIMIT {limit};
+;
         """.strip(),
-        "Find buildings constructed since year {year} in project {project_id} scenario {scenario_id}, ordered by construction year descending, limit to {limit} results",
+        "Find buildings constructed since year {year} in project {project_id} scenario {scenario_id}, ordered by construction year descending",
         {"building", "year_filter", "temporal", "basic"}
     ))
     
@@ -1137,9 +1194,9 @@ WHERE bp.project_id = '{project_id}'
   AND bp.scenario_id = '{scenario_id}'
   AND bp.height >= {min_height}
 ORDER BY bp.height DESC
-LIMIT {limit};
+;
         """.strip(),
-        "Find tall buildings (height >= {min_height} meters) in project {project_id} scenario {scenario_id}, ordered by height descending, limit to {limit} results",
+        "Find tall buildings (height >= {min_height} meters) in project {project_id} scenario {scenario_id}, ordered by height descending",
         {"building", "height_filter", "basic"}
     ))
     
@@ -1153,9 +1210,9 @@ WHERE bp.project_id = '{project_id}'
   AND bp.scenario_id = '{scenario_id}'
   AND bp.number_of_floors >= {min_people}
 ORDER BY bp.number_of_floors DESC
-LIMIT {limit};
+;
         """.strip(),
-        "Find buildings with at least {min_people} floors in project {project_id} scenario {scenario_id}, ordered by floor count descending, limit to {limit} results",
+        "Find buildings with at least {min_people} floors in project {project_id} scenario {scenario_id}, ordered by floor count descending",
         {"building", "floors_filter", "basic"}
     ))
     
@@ -1187,9 +1244,9 @@ WHERE bp.project_id = '{project_id}'
   AND bp.scenario_id = '{scenario_id}'
   AND bp.n_people > 0
 ORDER BY bp.n_people DESC
-LIMIT {limit};
+;
         """.strip(),
-        "Find buildings with population data in project {project_id} scenario {scenario_id}, ordered by number of people descending, limit to {limit} results",
+        "Find buildings with population data in project {project_id} scenario {scenario_id}, ordered by number of people descending",
         {"building", "population", "filter", "basic"}
     ))
     
@@ -1238,10 +1295,167 @@ FROM cim_vector.cim_wizard_building b
 JOIN cim_vector.cim_wizard_building_properties bp ON b.building_id = bp.building_id AND b.lod = bp.lod
 WHERE bp.project_id = '{project_id}'
   AND bp.scenario_id = '{scenario_id}'
-LIMIT {limit};
+;
         """.strip(),
-        "List buildings with basic properties in project {project_id} scenario {scenario_id}, limit to {limit} results",
+        "List buildings with basic properties in project {project_id} scenario {scenario_id}",
         {"building", "list", "basic"}
+    ))
+    
+    # ADD MORE PRIORITY 1 TEMPLATES (SIMPLE_SELECT and AGGREGATION - 70% of queries)
+    
+    # A21: Buildings with specific height range
+    templates.append((
+        "CIM_A21_buildings_height_range",
+        """
+SELECT bp.building_id, bp.type, bp.height, bp.area, bp.n_people
+FROM cim_vector.cim_wizard_building_properties bp
+WHERE bp.project_id = '{project_id}'
+  AND bp.scenario_id = '{scenario_id}'
+  AND bp.height BETWEEN {min_height} AND {max_height}
+;
+        """.strip(),
+        "Find buildings with height between {min_height} and {max_height} meters in project {project_id} scenario {scenario_id}",
+        {"building", "height_filter", "range", "basic"}
+    ))
+    
+    # A22: Count residential buildings
+    templates.append((
+        "CIM_A22_count_residential",
+        """
+SELECT COUNT(*) as residential_count
+FROM cim_vector.cim_wizard_building_properties bp
+WHERE bp.project_id = '{project_id}'
+  AND bp.scenario_id = '{scenario_id}'
+  AND bp.type = 'residential';
+        """.strip(),
+        "Count residential buildings in project {project_id} scenario {scenario_id}",
+        {"building", "count", "type_filter", "basic"}
+    ))
+    
+    # A23: Maximum building height
+    templates.append((
+        "CIM_A23_max_building_height",
+        """
+SELECT MAX(bp.height) as max_height,
+       MIN(bp.height) as min_height,
+       AVG(bp.height) as avg_height
+FROM cim_vector.cim_wizard_building_properties bp
+WHERE bp.project_id = '{project_id}'
+  AND bp.scenario_id = '{scenario_id}';
+        """.strip(),
+        "Get maximum, minimum and average building height for project {project_id} scenario {scenario_id}",
+        {"building", "aggregation", "statistics", "basic"}
+    ))
+    
+    # A24: Buildings with families
+    templates.append((
+        "CIM_A24_buildings_with_families",
+        """
+SELECT bp.building_id, bp.type, bp.n_family, bp.n_people, bp.area
+FROM cim_vector.cim_wizard_building_properties bp
+WHERE bp.project_id = '{project_id}'
+  AND bp.scenario_id = '{scenario_id}'
+  AND bp.n_family >= {min_people}
+;
+        """.strip(),
+        "Find buildings with at least {min_people} families in project {project_id} scenario {scenario_id}",
+        {"building", "family_filter", "basic"}
+    ))
+    
+    # A25: Total population in project
+    templates.append((
+        "CIM_A25_total_population",
+        """
+SELECT SUM(bp.n_people) as total_population,
+       COUNT(*) as building_count,
+       AVG(bp.n_people) as avg_people_per_building
+FROM cim_vector.cim_wizard_building_properties bp
+WHERE bp.project_id = '{project_id}'
+  AND bp.scenario_id = '{scenario_id}';
+        """.strip(),
+        "Calculate total population and average people per building for project {project_id} scenario {scenario_id}",
+        {"building", "population", "aggregation", "basic"}
+    ))
+    
+    # A26: Buildings by construction period
+    templates.append((
+        "CIM_A26_buildings_by_period",
+        """
+SELECT bp.const_period_census, 
+       COUNT(*) as building_count,
+       AVG(bp.area) as avg_area
+FROM cim_vector.cim_wizard_building_properties bp
+WHERE bp.project_id = '{project_id}'
+  AND bp.scenario_id = '{scenario_id}'
+GROUP BY bp.const_period_census
+ORDER BY building_count DESC;
+        """.strip(),
+        "Group buildings by construction period for project {project_id} scenario {scenario_id}, ordered by count descending",
+        {"building", "construction_period", "aggregation", "basic"}
+    ))
+    
+    # A27: Large buildings
+    templates.append((
+        "CIM_A27_large_buildings",
+        """
+SELECT bp.building_id, bp.type, bp.area, bp.volume, bp.height
+FROM cim_vector.cim_wizard_building_properties bp
+WHERE bp.project_id = '{project_id}'
+  AND bp.scenario_id = '{scenario_id}'
+  AND bp.area >= {max_area}
+ORDER BY bp.area DESC;
+        """.strip(),
+        "Find large buildings with area >= {max_area} sqm in project {project_id} scenario {scenario_id}, ordered by area descending",
+        {"building", "area_filter", "large", "basic"}
+    ))
+    
+    # A28: Buildings with many floors
+    templates.append((
+        "CIM_A28_multi_floor_buildings",
+        """
+SELECT bp.building_id, bp.type, bp.number_of_floors, bp.height
+FROM cim_vector.cim_wizard_building_properties bp
+WHERE bp.project_id = '{project_id}'
+  AND bp.scenario_id = '{scenario_id}'
+  AND bp.number_of_floors >= {min_people}
+;
+        """.strip(),
+        "Find buildings with {min_people} or more floors in project {project_id} scenario {scenario_id}",
+        {"building", "floors_filter", "basic"}
+    ))
+    
+    # A29: Average building metrics by type
+    templates.append((
+        "CIM_A29_avg_metrics_by_type",
+        """
+SELECT bp.type,
+       AVG(bp.height) as avg_height,
+       AVG(bp.area) as avg_area,
+       AVG(bp.volume) as avg_volume
+FROM cim_vector.cim_wizard_building_properties bp
+WHERE bp.project_id = '{project_id}'
+  AND bp.scenario_id = '{scenario_id}'
+GROUP BY bp.type;
+        """.strip(),
+        "Calculate average height, area and volume by building type for project {project_id} scenario {scenario_id}",
+        {"building", "aggregation", "metrics", "basic"}
+    ))
+    
+    # A30: Building volume statistics
+    templates.append((
+        "CIM_A30_volume_statistics",
+        """
+SELECT COUNT(*) as building_count,
+       SUM(bp.volume) as total_volume,
+       AVG(bp.volume) as avg_volume,
+       MAX(bp.volume) as max_volume
+FROM cim_vector.cim_wizard_building_properties bp
+WHERE bp.project_id = '{project_id}'
+  AND bp.scenario_id = '{scenario_id}'
+  AND bp.volume > 0;
+        """.strip(),
+        "Calculate volume statistics for buildings with non-zero volume in project {project_id} scenario {scenario_id}",
+        {"building", "volume", "statistics", "basic"}
     ))
     
     # ==========================================================================
@@ -1261,9 +1475,9 @@ JOIN cim_vector.cim_wizard_building_properties bp ON b.building_id = bp.building
 JOIN cim_census.censusgeo c ON public.ST_Within(public.ST_Centroid(b.building_geometry), c.geometry)
 WHERE bp.project_id = '{project_id}'
   AND bp.scenario_id = '{scenario_id}'
-LIMIT {limit};
+;
         """.strip(),
-        "Find buildings within census zones for project {project_id} scenario {scenario_id}, limit to {limit} results",
+        "Find buildings within census zones for project {project_id} scenario {scenario_id}",
         {"building", "census", "spatial_predicate", "basic"}
     ))
     
@@ -1279,9 +1493,9 @@ JOIN cim_vector.cim_wizard_project_scenario ps ON public.ST_Intersects(c.geometr
 WHERE ps.project_id = '{project_id}'
   AND ps.scenario_id = '{scenario_id}'
 ORDER BY c.p1 DESC
-LIMIT {limit};
+;
         """.strip(),
-        "Find census zones that intersect with project {project_id} scenario {scenario_id} boundary, ordered by total population descending, limit to {limit} results",
+        "Find census zones that intersect with project {project_id} scenario {scenario_id} boundary, ordered by total population descending",
         {"census", "project", "spatial_predicate", "basic"}
     ))
     
@@ -1325,9 +1539,9 @@ WHERE bp.project_id = '{project_id}'
   AND gb.in_service = true
   AND public.ST_DWithin(b.building_geometry, gb.geometry, {max_distance})
 ORDER BY distance_to_grid_m ASC
-LIMIT {limit};
+;
         """.strip(),
-        "Find buildings in project {project_id} scenario {scenario_id} within {max_distance} meters of active grid buses with voltage at or above {voltage_kv} kV, ordered by distance ascending, limit to {limit} results",
+        "Find buildings in project {project_id} scenario {scenario_id} within {max_distance} meters of active grid buses with voltage at or above {voltage_kv} kV, ordered by distance ascending",
         {"building", "grid", "distance", "proximity", "spatial_join"}
     ))
     
@@ -1346,9 +1560,9 @@ WHERE bp.project_id = '{project_id}'
   AND bp.scenario_id = '{scenario_id}'
 GROUP BY cg.comune
 ORDER BY total_population DESC
-LIMIT {limit};
+;
         """.strip(),
-        "Aggregate building data (count, total population, average area) by census municipality for project {project_id} scenario {scenario_id}, ordered by total population descending, limit to {limit} results",
+        "Aggregate building data (count, total population, average area) by census municipality for project {project_id} scenario {scenario_id}, ordered by total population descending",
         {"building", "census", "aggregation", "spatial_join"}
     ))
     
@@ -1367,9 +1581,9 @@ WHERE gl.in_service = true
   AND gb1.in_service = true
   AND gb2.in_service = true
 ORDER BY gl.length_km DESC
-LIMIT {limit};
+;
         """.strip(),
-        "Analyze electrical grid line connectivity between active bus stations, ordered by line length descending, limit to {limit} results",
+        "Analyze electrical grid line connectivity between active bus stations, ordered by line length descending",
         {"grid", "network", "connectivity", "multi_join"}
     ))
     
@@ -1388,9 +1602,9 @@ WITH buffered_buildings AS (
 SELECT building_id, type, public.ST_Area(buffer_geom) as buffer_area_sqm
 FROM buffered_buildings
 ORDER BY buffer_area_sqm DESC
-LIMIT {limit};
+;
         """.strip(),
-        "Create {buffer_distance} meter buffers around buildings in project {project_id} scenario {scenario_id} and calculate buffer areas, ordered by area descending, limit to {limit} results",
+        "Create {buffer_distance} meter buffers around buildings in project {project_id} scenario {scenario_id} and calculate buffer areas, ordered by area descending",
         {"building", "buffer", "processing", "cte"}
     ))
     
@@ -1421,13 +1635,13 @@ JOIN cim_vector.cim_wizard_building_properties bp1 ON b1.building_id = bp1.build
 CROSS JOIN cim_vector.cim_wizard_building b2
 WHERE bp1.project_id = '{project_id}'
   AND bp1.scenario_id = '{scenario_id}'
-  AND b2.building_id = '{census_id}'
+  AND b2.building_id = '{building_id}'
   AND b1.building_id != b2.building_id
   AND public.ST_Distance(public.ST_Centroid(b1.building_geometry), public.ST_Centroid(b2.building_geometry)) < {max_distance}
 ORDER BY distance_m ASC
 LIMIT 10;
         """.strip(),
-        "Find 10 nearest buildings to building {census_id} within {max_distance} meters in project {project_id} scenario {scenario_id}, using centroid distance and ordered by distance ascending",
+        "Find 10 nearest buildings to building {building_id} within {max_distance} meters in project {project_id} scenario {scenario_id}, using centroid distance and ordered by distance ascending",
         {"building", "distance", "nearest_neighbor", "proximity"}
     ))
     
@@ -1442,14 +1656,14 @@ SELECT gb.bus_id,
 FROM cim_vector.cim_wizard_building b
 JOIN cim_vector.cim_wizard_building_properties bp ON b.building_id = bp.building_id AND b.lod = bp.lod
 CROSS JOIN cim_network.network_buses gb
-WHERE b.building_id = '{census_id}'
+WHERE b.building_id = '{building_id}'
   AND bp.project_id = '{project_id}'
   AND bp.scenario_id = '{scenario_id}'
   AND gb.in_service = true
 ORDER BY distance_m ASC
 LIMIT 1;
         """.strip(),
-        "Find the closest active grid bus to building {census_id} in project {project_id} scenario {scenario_id} by centroid distance",
+        "Find the closest active grid bus to building {building_id} in project {project_id} scenario {scenario_id} by centroid distance",
         {"building", "grid", "nearest_neighbor", "distance"}
     ))
     
@@ -1540,9 +1754,9 @@ cluster_stats AS (
 SELECT cluster_id, type, building_count, total_residents
 FROM cluster_stats
 ORDER BY total_residents DESC
-LIMIT {limit};
+;
         """.strip(),
-        "Perform DBSCAN spatial clustering on buildings by type in project {project_id} scenario {scenario_id} with epsilon {cluster_distance} meters and minimum {min_points} points, showing clusters with at least {min_cluster_size} buildings, ordered by total residents descending, limit to {limit} results",
+        "Perform DBSCAN spatial clustering on buildings by type in project {project_id} scenario {scenario_id} with epsilon {cluster_distance} meters and minimum {min_points} points, showing clusters with at least {min_cluster_size} buildings, ordered by total residents descending",
         {"building", "clustering", "advanced", "cte", "window_function"}
     ))
     
@@ -1599,9 +1813,9 @@ JOIN cim_raster.dsm_sansalva dsm ON public.ST_Intersects(dsm.rast, b.building_ge
 WHERE bp.project_id = '{project_id}' 
   AND bp.scenario_id = '{scenario_id}'
   AND bp.type = '{building_type}'
-LIMIT {limit};
+;
         """.strip(),
-        "Extract DTM and DSM raster elevation values at centroids of {building_type} buildings in project {project_id} scenario {scenario_id}, limit to {limit} results",
+        "Extract DTM and DSM raster elevation values at centroids of {building_type} buildings in project {project_id} scenario {scenario_id}",
         {"building", "raster", "raster_vector", "advanced", "multi_join"}
     ))
     
@@ -1710,7 +1924,7 @@ WITH building_geom AS (
   SELECT b.building_id, bp.type, b.building_geometry
   FROM cim_vector.cim_wizard_building b
   JOIN cim_vector.cim_wizard_building_properties bp ON b.building_id = bp.building_id AND b.lod = bp.lod
-  WHERE b.building_id = '{census_id}'
+  WHERE b.building_id = '{building_id}'
     AND bp.project_id = '{project_id}'
     AND bp.scenario_id = '{scenario_id}'
 )
@@ -1722,7 +1936,7 @@ FROM building_geom bg
 JOIN cim_raster.dtm dtm ON public.ST_Intersects(dtm.rast, bg.building_geometry)
 LIMIT 1;
         """.strip(),
-        "Clip DTM raster by footprint of building {census_id} in project {project_id} scenario {scenario_id} and extract average ground elevation statistics",
+        "Clip DTM raster by footprint of building {building_id} in project {project_id} scenario {scenario_id} and extract average ground elevation statistics",
         {"building", "raster", "clip", "processing", "advanced", "cte"}
     ))
     
@@ -1734,7 +1948,7 @@ WITH building_geom AS (
   SELECT b.building_id, bp.type, bp.height as declared_height, b.building_geometry
   FROM cim_vector.cim_wizard_building b
   JOIN cim_vector.cim_wizard_building_properties bp ON b.building_id = bp.building_id AND b.lod = bp.lod
-  WHERE b.building_id = '{census_id}'
+  WHERE b.building_id = '{building_id}'
     AND bp.project_id = '{project_id}'
     AND bp.scenario_id = '{scenario_id}'
 ),
@@ -1757,7 +1971,7 @@ SELECT building_id,
        ROUND((ABS(declared_height - (avg_surface_elevation - avg_ground_elevation)))::numeric, 2) as height_difference_m
 FROM raster_values;
         """.strip(),
-        "Calculate building height from DSM and DTM raster difference for building {census_id} in project {project_id} scenario {scenario_id}, comparing calculated height (DSM - DTM) with declared height and showing the difference",
+        "Calculate building height from DSM and DTM raster difference for building {building_id} in project {project_id} scenario {scenario_id}, comparing calculated height (DSM - DTM) with declared height and showing the difference",
         {"building", "raster", "clip", "height_calculation", "advanced", "cte", "multi_raster"}
     ))
     
@@ -1793,7 +2007,7 @@ def create_comprehensive_sample(
     # Perform classifications
     sql_type = classify_sql_type(sql_pair.postgis_sql, metadata)
     question_tone = classify_question_tone(sql_pair.natural_language_desc)
-    difficulty = calculate_difficulty_dimensions(sql_pair.postgis_sql, metadata)
+    complexity = calculate_complexity_dimensions(sql_pair.postgis_sql, metadata)
     
     # Classify functions
     function_info = []
@@ -1805,66 +2019,77 @@ def create_comprehensive_sample(
             "difficulty": classify_function_difficulty(func)
         })
     
-    # Determine overall usage frequency for the query
-    usage_frequencies = [f["usage_frequency"] for f in function_info]
-    if "most_frequent" in usage_frequencies:
-        query_usage_frequency = "most_frequent"
-    elif "frequent" in usage_frequencies:
-        query_usage_frequency = "frequent"
-    else:
-        query_usage_frequency = "low_frequent"
+    # Check for TOP 15 most frequent spatial functions
+    TOP_15_SPATIAL_FUNCTIONS = [
+        "ST_AREA", "ST_INTERSECTS", "ST_CENTROID", "ST_DISTANCE", "ST_SUMMARYSTATS",
+        "ST_MAKEPOINT", "ST_YEAR", "ST_DWITHIN", "ST_SETSRID", "ST_WITHIN",
+        "ST_INTERSECTION", "ST_CLIP", "ST_Y", "ST_X", "ST_BUFFER"
+    ]
+    
+    top_15_function_flags = {}
+    for func in TOP_15_SPATIAL_FUNCTIONS:
+        top_15_function_flags[func.lower()] = func.upper() in [f.upper() for f in spatial_functions]
     
     # Determine priority
     template_priority = getattr(sql_pair, 'priority', infer_template_priority(sql_pair.template_id, sql_pair.tags))
     
-    # Create comprehensive sample
+    # Create comprehensive sample with standardized tags
     comprehensive_sample = {
-        # Core Identifiers
+        # Core Identifiers (ID first as requested)
         "id": sample_id,
         "database_id": database_id,
         "database_name": "cim_wizard",
         
-        # Natural Language Question
-        "question": sql_pair.natural_language_desc,
+        # Complexity Dimensions (standardized)
+        "sql_complexity": complexity['sql_complexity'],
+        "spatial_sql_complexity": complexity['spatial_sql_complexity'],
+        "schema_complexity": complexity['schema_complexity'],
+        
+        # Frequency Dimensions
+        "sql_frequency": complexity['sql_frequency'],
+        "spatial_frequency": complexity['spatial_frequency'],
+        "schema_frequency": complexity['schema_frequency'],
+        
+        # Counts
+        "table_count": complexity['table_count'],
+        "schema_count": complexity['schema_count'],
+        "join_count": complexity['join_count'],
+        "function_count": complexity['function_count'],
+        "spatial_function_count": complexity['function_count'],
+        
+        # SQL Type
+        "sql_type": sql_type,
+        
+        # Spatial Functions
+        "spatial_functions": spatial_functions,
+        "top_15_functions": top_15_function_flags,
+        
+        # Question Classification
         "question_tone": question_tone,
         
-        # Priority
-        "priority": template_priority,
+        # Sample type and quality tags
+        "sample_type": "POSITIVE",  # All Stage 1 samples are positive
+        "ambiguity_tag": "CLEAR",  # Stage 1 templates are unambiguous
+        "out_of_scope_tag": False,  # Stage 1 templates are all in-scope
+        
+        # Natural Language Question
+        "question": sql_pair.natural_language_desc,
         
         # SQL Queries
         "sql_postgis": sql_pair.postgis_sql,
         "sql_spatialite": sql_pair.spatialite_sql,
         
-        # SQL Classification & Taxonomy
-        "sql_type": sql_type,
-        "sql_taxonomy": {
-            "operation_type": sql_type,
-            "has_cte": "WITH" in sql_pair.postgis_sql.upper(),
-            "has_subquery": "(SELECT" in sql_pair.postgis_sql,
-            "has_aggregation": "GROUP BY" in sql_pair.postgis_sql.upper(),
-            "has_window_function": "PARTITION BY" in sql_pair.postgis_sql.upper(),
-            "join_type": "spatial" if sql_type == "SPATIAL_JOIN" else "standard" if "JOIN" in sql_pair.postgis_sql.upper() else "none"
-        },
-        
-        # Difficulty Dimensions
-        "difficulty": difficulty,
-        "difficulty_level": difficulty['overall_difficulty'],
-        
-        # Usage Frequency
-        "usage_frequency": query_usage_frequency,
+        # Priority
+        "priority": template_priority,
         
         # Database Schema Information
         "database_schema": {
             "schemas": schemas,
             "tables": tables,
-            "primary_schema": schemas[0] if schemas else None,
-            "table_count": len(tables),
-            "schema_count": len(set(schemas))
+            "primary_schema": schemas[0] if schemas else None
         },
         
-        # Spatial Functions with Classifications
-        "spatial_functions": spatial_functions,
-        "spatial_function_count": len(spatial_functions),
+        # Spatial Function Details
         "spatial_function_details": function_info,
         
         # Evidence
@@ -1881,7 +2106,6 @@ def create_comprehensive_sample(
         "stage": "stage1_cim",
         "generation_method": "rule_based_cim_wizard",
         "template_id": sql_pair.template_id,
-        "complexity_level": sql_pair.complexity,
         "tags": list(sql_pair.tags),
         "generation_params": values,
         "generated_at": datetime.now().isoformat()
@@ -1900,18 +2124,20 @@ def stratified_evaluation_sampling(
 ) -> List[int]:
     """
     Perform stratified sampling for representative evaluation set
+    Note: This is for reporting purposes only.
+    Actual evaluation benchmark will be created after Stage 3.
     
     Stratification Dimensions:
     1. SQL Type
-    2. Difficulty Level (query_complexity)
-    3. Usage Frequency
-    4. Complexity Level (A, B, C)
+    2. SQL Complexity  
+    3. SQL Frequency
+    4. Schema Complexity
     """
     
     random.seed(random_seed)
     
-    print(f"\n[STRATIFIED SAMPLING] Creating representative evaluation set")
-    print(f"Target size: {evaluation_sample_size} samples")
+    print(f"\n[STRATIFIED SAMPLING] Analysis for reporting")
+    print(f"Note: Actual evaluation benchmark created after Stage 3")
     
     # Group samples by stratification key
     strata = defaultdict(list)
@@ -1919,9 +2145,9 @@ def stratified_evaluation_sampling(
     for idx, sample in enumerate(enhanced_samples):
         key = (
             sample['sql_type'],
-            sample['difficulty']['query_complexity'],
-            sample['usage_frequency'],
-            sample['complexity_level']
+            sample['sql_complexity'],
+            sample['sql_frequency'],
+            sample['schema_complexity']
         )
         strata[key].append(idx)
     
@@ -1965,19 +2191,19 @@ def stratified_evaluation_sampling(
     
     # Sample from each stratum
     print(f"\n  Stratification Summary:")
-    print(f"  {'SQL Type':<25} {'Complexity':<12} {'Frequency':<15} {'Level':<6} {'Total':<8} {'Selected':<10}")
-    print(f"  {'-'*85}")
+    print(f"  {'SQL Type':<25} {'SQL Complex':<12} {'SQL Freq':<15} {'Schema Complex':<25} {'Total':<8} {'Selected':<10}")
+    print(f"  {'-'*110}")
     
     for stratum_key, stratum_indices in sorted(strata.items()):
         allocated_count = allocation[stratum_key]
         sampled = random.sample(stratum_indices, min(allocated_count, len(stratum_indices)))
         selected_indices.extend(sampled)
         
-        sql_type, difficulty, freq, complexity = stratum_key
-        print(f"  {sql_type:<25} {difficulty:<12} {freq:<15} {complexity:<6} {len(stratum_indices):<8} {len(sampled):<10}")
+        sql_type, sql_complexity, sql_freq, schema_complexity = stratum_key
+        print(f"  {sql_type:<25} {sql_complexity:<12} {sql_freq:<15} {schema_complexity:<25} {len(stratum_indices):<8} {len(sampled):<10}")
     
-    print(f"  {'-'*85}")
-    print(f"  {'TOTAL':<60} {total_samples:<8} {len(selected_indices):<10}")
+    print(f"  {'-'*110}")
+    print(f"  {'TOTAL':<82} {total_samples:<8} {len(selected_indices):<10}")
     
     return selected_indices
 
@@ -1988,11 +2214,13 @@ def stratified_evaluation_sampling(
 def generate_stage1_cim_dataset(
     num_variations: int = 200,
     output_file: str = "training_datasets/stage1_cim_dataset.jsonl",
-    evaluation_sample_size: int = 100,
     random_seed: int = 42
 ):
     """
     Generate Stage 1 CIM Wizard dataset with comprehensive metadata
+    
+    Note: Evaluation benchmark will be created separately using create_ftv2_evaluation_benchmark.py
+          after Stage 3 augmentation for better quality and diversity.
     """
     
     random.seed(random_seed)
@@ -2002,9 +2230,9 @@ def generate_stage1_cim_dataset(
     print("="*80)
     print(f"Configuration:")
     print(f"  - Variations per template: {num_variations}")
-    print(f"  - Evaluation samples: {evaluation_sample_size}")
     print(f"  - Random seed: {random_seed}")
     print(f"  - Output file: {output_file}")
+    print(f"  - LIMIT/ORDER BY distribution: 85% none, 7% ORDER only, 8% both")
     
     # Generate base templates
     print("\n[1/5] Generating CIM Wizard templates...")
@@ -2038,16 +2266,16 @@ def generate_stage1_cim_dataset(
                 if limit_strategy == "FULL_RESULTS":
                     # Remove LIMIT and ORDER BY
                     postgis_sql = remove_limit_and_order(postgis_sql)
-                    enhanced_desc = enhanced_desc.replace(", limit to {limit} results", "")
-                    enhanced_desc = enhanced_desc.replace("limit to {limit} results", "")
+                    enhanced_desc = enhanced_desc.replace("", "")
+                    enhanced_desc = enhanced_desc.replace("", "")
                     enhanced_desc = enhanced_desc.replace(", ordered by", ", showing")
                     enhanced_desc = enhanced_desc.replace("ordered by", "showing")
                 
                 elif limit_strategy == "ORDERED_ONLY":
                     # Keep ORDER BY, remove LIMIT
                     postgis_sql = remove_limit_only(postgis_sql)
-                    enhanced_desc = enhanced_desc.replace(", limit to {limit} results", "")
-                    enhanced_desc = enhanced_desc.replace("limit to {limit} results", "")
+                    enhanced_desc = enhanced_desc.replace("", "")
+                    enhanced_desc = enhanced_desc.replace("", "")
                 
                 # TOP_N keeps both LIMIT and ORDER BY as-is
                 
@@ -2101,6 +2329,12 @@ def generate_stage1_cim_dataset(
         enhanced_sample['has_order_by'] = 'ORDER BY' in pair.postgis_sql.upper()
         enhanced_sample['limit_strategy'] = determine_limit_strategy(pair.template_id, i)
         
+        # Remove legacy complexity_level field from pair
+        enhanced_sample.pop('complexity_level', None)
+        enhanced_sample.pop('difficulty', None)
+        enhanced_sample.pop('difficulty_level', None)
+        enhanced_sample.pop('usage_frequency', None)
+        
         enhanced_samples.append(enhanced_sample)
         
         if (i + 1) % 500 == 0:
@@ -2108,34 +2342,45 @@ def generate_stage1_cim_dataset(
     
     print(f"      Created {len(enhanced_samples)} enhanced samples")
     
-    # Select evaluation samples
-    print(f"\n[4/5] Selecting evaluation samples using stratified sampling...")
-    eval_size = min(evaluation_sample_size, len(enhanced_samples))
-    eval_indices = set(stratified_evaluation_sampling(
-        enhanced_samples, 
-        eval_size, 
-        random_seed
-    ))
+    # Generate stratification report (for analysis, not for creating eval set)
+    print(f"\n[4/5] Generating stratification analysis...")
+    print(f"      Note: Evaluation benchmark will be created after Stage 3 using create_ftv2_evaluation_benchmark.py")
     
-    # Update evaluation flags
-    for idx in eval_indices:
-        enhanced_samples[idx]['has_results'] = True
-        enhanced_samples[idx]['results'] = None
+    # Analyze distribution for reporting
+    from collections import Counter
+    sql_types = Counter(s['sql_type'] for s in enhanced_samples)
+    sql_complexities = Counter(s['sql_complexity'] for s in enhanced_samples)
+    sql_frequencies = Counter(s['sql_frequency'] for s in enhanced_samples)
+    schema_complexities = Counter(s['schema_complexity'] for s in enhanced_samples)
+    limit_strategies = Counter(s['limit_strategy'] for s in enhanced_samples)
     
-    # Save datasets
-    print(f"\n[5/5] Saving datasets...")
+    print(f"\n      Distribution Analysis:")
+    print(f"      SQL Types (Target: SIMPLE_SELECT 45%, AGGREGATION 25%):")
+    for sql_type, count in sql_types.most_common():
+        print(f"        {sql_type:25s}: {count:5,} ({count/len(enhanced_samples)*100:5.1f}%)")
+    
+    print(f"      SQL Complexity:")
+    for complexity, count in sql_complexities.most_common():
+        print(f"        {complexity:15s}: {count:5,} ({count/len(enhanced_samples)*100:5.1f}%)")
+    
+    print(f"      SQL Frequency (Domain-specific):")
+    for freq, count in sql_frequencies.most_common():
+        print(f"        {freq:15s}: {count:5,} ({count/len(enhanced_samples)*100:5.1f}%)")
+    
+    print(f"      Schema Complexity (Target: SINGLE_CIM_VECTOR 70%):")
+    for schema_comp, count in schema_complexities.most_common():
+        print(f"        {schema_comp:35s}: {count:5,} ({count/len(enhanced_samples)*100:5.1f}%)")
+    
+    print(f"      LIMIT Strategies (Target: 85/7/8):")
+    for strategy, count in limit_strategies.most_common():
+        print(f"        {strategy:15s}: {count:5,} ({count/len(enhanced_samples)*100:5.1f}%)")
+    
+    # Save dataset
+    print(f"\n[5/5] Saving dataset...")
     with open(output_file, 'w', encoding='utf-8') as f:
         for sample in enhanced_samples:
             f.write(json.dumps(sample, ensure_ascii=False) + '\n')
     print(f"      Main dataset: {output_file}")
-    
-    # Save evaluation subset
-    eval_samples = [s for s in enhanced_samples if s['has_results']]
-    eval_file = output_file.replace('.jsonl', '_eval.jsonl')
-    with open(eval_file, 'w', encoding='utf-8') as f:
-        for sample in eval_samples:
-            f.write(json.dumps(sample, ensure_ascii=False) + '\n')
-    print(f"      Evaluation subset: {eval_file} ({len(eval_samples)} samples)")
     
     # Generate statistics
     stats = generate_comprehensive_statistics(enhanced_samples)
@@ -2162,13 +2407,16 @@ def generate_comprehensive_statistics(samples: List[Dict]) -> Dict:
         "priority_distribution": {},
         "sql_types": {},
         "question_tones": {},
-        "difficulty_levels": {},
-        "complexity_levels": {},
-        "usage_frequency": {},
+        "sql_complexity": {},
+        "spatial_sql_complexity": {},
+        "schema_complexity": {},
+        "sql_frequency": {},
+        "spatial_frequency": {},
+        "schema_frequency": {},
         "spatial_functions": {},
-        "function_usage_frequency": {},
         "function_data_types": {},
-        "schema_complexity": {}
+        "limit_distribution": {},
+        "sample_types": {}
     }
     
     # Collect statistics
@@ -2185,17 +2433,25 @@ def generate_comprehensive_statistics(samples: List[Dict]) -> Dict:
         tone = sample['question_tone']
         stats['question_tones'][tone] = stats['question_tones'].get(tone, 0) + 1
         
-        # Difficulty levels
-        difficulty = sample['difficulty']['query_complexity']
-        stats['difficulty_levels'][difficulty] = stats['difficulty_levels'].get(difficulty, 0) + 1
+        # Complexity dimensions
+        sql_comp = sample['sql_complexity']
+        stats['sql_complexity'][sql_comp] = stats['sql_complexity'].get(sql_comp, 0) + 1
         
-        # Complexity levels (A, B, C)
-        complexity = sample['complexity_level']
-        stats['complexity_levels'][complexity] = stats['complexity_levels'].get(complexity, 0) + 1
+        spatial_comp = sample['spatial_sql_complexity']
+        stats['spatial_sql_complexity'][spatial_comp] = stats['spatial_sql_complexity'].get(spatial_comp, 0) + 1
         
-        # Usage frequency
-        freq = sample['usage_frequency']
-        stats['usage_frequency'][freq] = stats['usage_frequency'].get(freq, 0) + 1
+        schema_comp = sample['schema_complexity']
+        stats['schema_complexity'][schema_comp] = stats['schema_complexity'].get(schema_comp, 0) + 1
+        
+        # Frequency dimensions  
+        sql_freq = sample['sql_frequency']
+        stats['sql_frequency'][sql_freq] = stats['sql_frequency'].get(sql_freq, 0) + 1
+        
+        spatial_freq = sample['spatial_frequency']
+        stats['spatial_frequency'][spatial_freq] = stats['spatial_frequency'].get(spatial_freq, 0) + 1
+        
+        schema_freq = sample['schema_frequency']
+        stats['schema_frequency'][schema_freq] = stats['schema_frequency'].get(schema_freq, 0) + 1
         
         # Spatial functions
         for func in sample['spatial_functions']:
@@ -2203,21 +2459,23 @@ def generate_comprehensive_statistics(samples: List[Dict]) -> Dict:
         
         # Function details
         for func_detail in sample.get('spatial_function_details', []):
-            func = func_detail['name']
-            usage_freq = func_detail['usage_frequency']
             data_type = func_detail['data_type']
-            
-            stats['function_usage_frequency'][usage_freq] = stats['function_usage_frequency'].get(usage_freq, 0) + 1
             stats['function_data_types'][data_type] = stats['function_data_types'].get(data_type, 0) + 1
         
-        # Schema complexity
-        schema_complexity = sample['difficulty']['schema_complexity']
-        stats['schema_complexity'][schema_complexity] = stats['schema_complexity'].get(schema_complexity, 0) + 1
+        # LIMIT distribution
+        limit_strategy = sample.get('limit_strategy', 'UNKNOWN')
+        stats['limit_distribution'][limit_strategy] = stats['limit_distribution'].get(limit_strategy, 0) + 1
+        
+        # Sample types
+        sample_type = sample.get('sample_type', 'POSITIVE')
+        stats['sample_types'][sample_type] = stats['sample_types'].get(sample_type, 0) + 1
     
     # Sort by frequency
-    for key in ['sql_types', 'question_tones', 'difficulty_levels', 'complexity_levels', 
-                'usage_frequency', 'spatial_functions', 'schema_complexity']:
-        stats[key] = dict(sorted(stats[key].items(), key=lambda x: -x[1]))
+    for key in ['sql_types', 'question_tones', 'sql_complexity', 'spatial_sql_complexity',
+                'schema_complexity', 'sql_frequency', 'spatial_frequency', 'schema_frequency',
+                'spatial_functions', 'limit_distribution', 'sample_types']:
+        if key in stats:
+            stats[key] = dict(sorted(stats[key].items(), key=lambda x: -x[1]))
     
     return stats
 
@@ -2245,27 +2503,32 @@ def print_summary_statistics(stats: Dict):
         }.get(priority, '')
         print(f"   {priority} ({priority_desc}): {count:,} ({percentage:.1f}%)")
     
-    print(f"\nSQL Type Distribution:")
+    print(f"\nSQL Type Distribution (Frequency-Based):")
     for sql_type, count in list(stats['sql_types'].items())[:10]:
         percentage = (count / info['total_samples']) * 100
-        print(f"   {sql_type}: {count:,} ({percentage:.1f}%)")
+        target = SQL_TYPE_FREQUENCY.get(sql_type, {}).get('frequency', 0) * 100
+        print(f"   {sql_type:25s}: {count:5,} ({percentage:5.1f}% | Target: {target:5.1f}%)")
     
-    print(f"\nComplexity Level Distribution:")
-    for complexity, count in stats['complexity_levels'].items():
+    print(f"\nSQL Complexity Distribution:")
+    for complexity, count in stats['sql_complexity'].items():
         percentage = (count / info['total_samples']) * 100
-        print(f"   Level {complexity}: {count:,} ({percentage:.1f}%)")
+        print(f"   {complexity:15s}: {count:5,} ({percentage:5.1f}%)")
     
-    print(f"\nDifficulty Distribution:")
-    for difficulty in ['EASY', 'MEDIUM', 'HARD']:
-        count = stats['difficulty_levels'].get(difficulty, 0)
-        percentage = (count / info['total_samples']) * 100 if count > 0 else 0
-        print(f"   {difficulty}: {count:,} ({percentage:.1f}%)")
+    print(f"\nSchema Complexity Distribution:")
+    for schema_comp, count in stats['schema_complexity'].items():
+        percentage = (count / info['total_samples']) * 100
+        target = SCHEMA_FREQUENCY.get(schema_comp, {}).get('frequency', 0) * 100
+        print(f"   {schema_comp:35s}: {count:5,} ({percentage:5.1f}% | Target: {target:5.1f}%)")
     
-    print(f"\nUsage Frequency Distribution:")
-    for freq in ['most_frequent', 'frequent', 'low_frequent']:
-        count = stats['usage_frequency'].get(freq, 0)
-        percentage = (count / info['total_samples']) * 100 if count > 0 else 0
-        print(f"   {freq}: {count:,} ({percentage:.1f}%)")
+    print(f"\nSQL Frequency Category Distribution:")
+    for freq, count in stats['sql_frequency'].items():
+        percentage = (count / info['total_samples']) * 100
+        print(f"   {freq:15s}: {count:5,} ({percentage:5.1f}%)")
+    
+    print(f"\nSpatial Frequency Distribution:")
+    for freq, count in stats['spatial_frequency'].items():
+        percentage = (count / info['total_samples']) * 100
+        print(f"   {freq:15s}: {count:5,} ({percentage:5.1f}%)")
     
     print(f"\nFunction Data Types:")
     for data_type, count in stats['function_data_types'].items():
@@ -2275,10 +2538,10 @@ def print_summary_statistics(stats: Dict):
     for i, (func, count) in enumerate(list(stats['spatial_functions'].items())[:15], 1):
         print(f"   {i}. {func}: {count:,}")
     
-    print(f"\nSchema Complexity:")
-    for complexity, count in stats['schema_complexity'].items():
+    print(f"\nLIMIT/ORDER BY Distribution (Target: 85/7/8):")
+    for strategy, count in stats.get('limit_distribution', {}).items():
         percentage = (count / info['total_samples']) * 100
-        print(f"   {complexity}: {count:,} ({percentage:.1f}%)")
+        print(f"   {strategy:15s}: {count:5,} ({percentage:5.1f}%)")
     
     print(f"\nDataset Generation Complete!")
     print(f"   Ready for Stage 2 (SDV Synthetic Generation)")
@@ -2293,18 +2556,23 @@ if __name__ == "__main__":
     
     # Parse command line arguments
     num_variations = int(sys.argv[1]) if len(sys.argv) > 1 else 200
-    eval_size = int(sys.argv[2]) if len(sys.argv) > 2 else 100
     
     # Generate CIM Wizard dataset
     samples, stats = generate_stage1_cim_dataset(
         num_variations=num_variations,
         output_file="training_datasets/stage1_cim_dataset.jsonl",
-        evaluation_sample_size=eval_size,
         random_seed=42
     )
+    
+    from collections import Counter
     
     print(f"\nStage 1 CIM Wizard Dataset Successfully Created!")
     print(f"   Total samples: {len(samples):,}")
     print(f"   Output: training_datasets/stage1_cim_dataset.jsonl")
-    print(f"\n  Next step: Run Stage 2 (SDV Synthetic Generation)")
+    print(f"\n   LIMIT/ORDER BY Distribution (Phase 4):")
+    limit_dist = Counter(s['limit_strategy'] for s in samples)
+    for strategy, count in limit_dist.items():
+        print(f"     {strategy:15s}: {count:5,} ({count/len(samples)*100:5.1f}%)")
+    print(f"\n   Next step: Run Stage 2 (SDV Synthetic Generation)")
+    print(f"   Evaluation benchmark: Create after Stage 3 using create_ftv2_evaluation_benchmark.py")
 

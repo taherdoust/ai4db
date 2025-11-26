@@ -1,0 +1,180 @@
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                         DATASET DISTRIBUTION REPORT                          ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+  Input File: ../ai4db/training_datasets/downloaded/stage3_augmented_dataset_FINAL_annotated.jsonl
+  Generated: 2025-11-26 10:11:48
+  Total Samples: 176837
+
+────────────────────────────────────────────────────────────────────────────────
+SUMMARY STATISTICS
+────────────────────────────────────────────────────────────────────────────────
+
+  Task Categories:
+    • Spatial/Raster Tasks: 2725 (1.5%)
+    • Non-Spatial SQL Tasks: 174112 (98.5%)
+
+  Schema Usage:
+    • cim_network: 75226 samples (42.5%)
+    • cim_vector: 66108 samples (37.4%)
+    • cim_raster: 18905 samples (10.7%)
+    • cim_census: 16598 samples (9.4%)
+
+  Average Complexity:
+    • Task Complexity: 1.57 (1=Easy, 3=Hard)
+    • Domain Complexity: 1.00 (1=Easy, 3=Hard)
+
+TASK TYPE DISTRIBUTION
+================================================================================
+  Category                  │  Count │      % │ Distribution
+  -------------------------─┼--------┼--------┼--------------------------------
+  SIMPLE_SELECT             │  91936 │  52.0% │ ████████████░░░░░░░░░░░░░
+  NESTED_QUERY              │  50155 │  28.4% │ ███████░░░░░░░░░░░░░░░░░░
+  SQL_AGGREGATION           │  32009 │  18.1% │ ████░░░░░░░░░░░░░░░░░░░░░
+  SPATIAL_MEASUREMENT       │   1035 │   0.6% │ ░░░░░░░░░░░░░░░░░░░░░░░░░
+  SPATIAL_JOIN              │    896 │   0.5% │ ░░░░░░░░░░░░░░░░░░░░░░░░░
+  SPATIAL_ACCESSOR          │    794 │   0.4% │ ░░░░░░░░░░░░░░░░░░░░░░░░░
+  SQL_JOIN                  │     12 │   0.0% │ ░░░░░░░░░░░░░░░░░░░░░░░░░
+
+  Descriptions:
+    • SIMPLE_SELECT: Simple SELECT with WHERE, no spatial operations
+    • NESTED_QUERY: CTEs, subqueries, nested SELECT
+    • SQL_AGGREGATION: Aggregation (COUNT, SUM, AVG) with GROUP BY, no spatial
+    • SPATIAL_MEASUREMENT: Basic measurements (ST_Area, ST_Distance, ST_Length, ST_Perimeter)
+    • SPATIAL_JOIN: Join using spatial predicates
+    • SPATIAL_ACCESSOR: Coordinate extraction (ST_X, ST_Y, ST_Centroid, ST_Envelope)
+    • SQL_JOIN: Standard table join without spatial predicates
+
+DOMAIN TYPE DISTRIBUTION
+================================================================================
+  Category                  │  Count │      % │ Distribution
+  -------------------------─┼--------┼--------┼--------------------------------
+  SINGLE_SCHEMA_OTHER       │ 110729 │  62.6% │ ███████████████░░░░░░░░░░
+  SINGLE_SCHEMA_CIM_VECTOR  │  66108 │  37.4% │ █████████░░░░░░░░░░░░░░░░
+
+  Descriptions:
+    • SINGLE_SCHEMA_OTHER: Single non-vector schema (census/network/raster only)
+    • SINGLE_SCHEMA_CIM_VECTOR: Single schema cim_vector only
+
+TASK COMPLEXITY DISTRIBUTION
+================================================================================
+  Category                  │  Count │      % │ Distribution
+  -------------------------─┼--------┼--------┼--------------------------------
+  1_Easy                    │ 125774 │  71.1% │ █████████████████░░░░░░░░
+  3_Hard                    │  50155 │  28.4% │ ███████░░░░░░░░░░░░░░░░░░
+  2_Medium                  │    908 │   0.5% │ ░░░░░░░░░░░░░░░░░░░░░░░░░
+
+TASK FREQUENCY DISTRIBUTION
+================================================================================
+  Category                  │  Count │      % │ Distribution
+  -------------------------─┼--------┼--------┼--------------------------------
+  1_Very_Frequent           │ 125876 │  71.2% │ █████████████████░░░░░░░░
+  3_Rare                    │  50155 │  28.4% │ ███████░░░░░░░░░░░░░░░░░░
+  2_Frequent                │    806 │   0.5% │ ░░░░░░░░░░░░░░░░░░░░░░░░░
+
+DOMAIN COMPLEXITY DISTRIBUTION
+================================================================================
+  Category                  │  Count │      % │ Distribution
+  -------------------------─┼--------┼--------┼--------------------------------
+  1_Easy                    │ 176837 │ 100.0% │ █████████████████████████
+
+DOMAIN FREQUENCY DISTRIBUTION
+================================================================================
+  Category                  │  Count │      % │ Distribution
+  -------------------------─┼--------┼--------┼--------------------------------
+  2_Frequent                │ 110729 │  62.6% │ ███████████████░░░░░░░░░░
+  1_Very_Frequent           │  66108 │  37.4% │ █████████░░░░░░░░░░░░░░░░
+
+QUESTION TONE DISTRIBUTION
+================================================================================
+  Category                  │  Count │      % │ Distribution
+  -------------------------─┼--------┼--------┼--------------------------------
+  INTERROGATIVE             │ 167021 │  94.4% │ ███████████████████████░░
+  DESCRIPTIVE               │   6079 │   3.4% │ ░░░░░░░░░░░░░░░░░░░░░░░░░
+  DIRECT                    │   3737 │   2.1% │ ░░░░░░░░░░░░░░░░░░░░░░░░░
+
+  Descriptions:
+    • INTERROGATIVE: Questions starting with what, which, where, how, etc.
+    • DESCRIPTIVE: Other descriptive requests
+    • DIRECT: Imperative statements (find, get, list, show, etc.)
+
+================================================================================
+TOP 15 SPATIAL FUNCTIONS USED
+================================================================================
+  ST_INTERSECTS             │   860 │ ████████████████████
+  ST_CENTROID               │   852 │ ███████████████████░
+  ST_AREA                   │   807 │ ██████████████████░░
+  ST_AREA_0                 │   807 │ ██████████████████░░
+  ST_LENGTH                 │   264 │ ██████░░░░░░░░░░░░░░
+  ST_LENGTH_0               │   264 │ ██████░░░░░░░░░░░░░░
+  ST_WITHIN                 │    36 │ ░░░░░░░░░░░░░░░░░░░░
+
+================================================================================
+CROSS-TABULATION: TASK TYPE × DOMAIN TYPE
+================================================================================
+  Task Type                 │ SINGLE_S │ SINGLE_S
+  -------------------------─┼---------─┼---------
+  SIMPLE_SELECT             │    61961 │    29975
+  NESTED_QUERY              │    25428 │    24727
+  SQL_AGGREGATION           │    22896 │     9113
+  SPATIAL_MEASUREMENT       │      348 │      687
+  SPATIAL_JOIN              │        0 │      896
+  SPATIAL_ACCESSOR          │       96 │      698
+  SQL_JOIN                  │        0 │       12
+
+================================================================================
+CROSS-TABULATION: TASK COMPLEXITY × DOMAIN COMPLEXITY
+================================================================================
+  Task/Domain     │     Easy │   Medium │     Hard │    Total
+  ---------------─┼----------┼----------┼----------┼----------
+  Easy            │   125774 │        0 │        0 │   125774
+  Medium          │      908 │        0 │        0 │      908
+  Hard            │    50155 │        0 │        0 │    50155
+  ---------------─┼----------┼----------┼----------┼----------
+  Total           │   176837 │        0 │        0 │   176837
+
+================================================================================
+TAXONOMY COVERAGE ANALYSIS
+================================================================================
+
+  Task Type Coverage: 7/18 (38.9%)
+  Missing Task Types:
+    • MULTI_SPATIAL_JOIN: Multiple spatial joins with complex predicates
+    • MULTI_SQL_JOIN: Multiple table joins (3+ tables)
+    • RASTER_ANALYSIS: Raster analysis and raster_accessor functions (ST_Value, ST_SummaryStats)
+    • RASTER_VECTOR: Raster-vector integration (ST_Clip, ST_Intersection with raster)
+    • SPATIAL_CLUSTERING: Spatial clustering (ST_ClusterDBSCAN, ST_ClusterKMeans)
+    • SPATIAL_CONSTRUCTOR: Geometry construction (ST_MakePoint, ST_GeomFromText, ST_Collect)
+    • SPATIAL_PREDICATE: Spatial predicates (ST_Intersects, ST_Contains, ST_Within, ST_Touches)
+    • SPATIAL_PREDICATE_DISTANCE: Distance-based predicates (ST_DWithin, ST_Overlaps, ST_Crosses, ST_Disjoint)
+    • SPATIAL_PROCESSING: Spatial processing (ST_Buffer, ST_Union, ST_Intersection, ST_Difference)
+    • SPATIAL_TRANSFORM: Coordinate transformation (ST_Transform, ST_SetSRID)
+    • SPATIAL_VALIDATION: Geometry validation (ST_IsValid, ST_MakeValid)
+
+  Domain Type Coverage: 2/5 (40.0%)
+  Missing Domain Types:
+    • MULTI_SCHEMA_COMPLEX: Three or more schemas combined
+    • MULTI_SCHEMA_WITHOUT_CIM_VECTOR: Multiple schemas without cim_vector
+    • MULTI_SCHEMA_WITH_CIM_VECTOR: cim_vector + one other schema (census/network/raster)
+
+================================================================================
+BALANCE ANALYSIS
+================================================================================
+
+  Task Type Distribution:
+    • Min samples per type: 12
+    • Max samples per type: 91936
+    • Mean: 25262.4
+    • Std Dev: 32792.6
+    • Imbalance Ratio (max/min): 7661.3x
+
+  Domain Type Distribution:
+    • Min samples per type: 66108
+    • Max samples per type: 110729
+    • Mean: 88418.5
+    • Std Dev: 22310.5
+    • Imbalance Ratio (max/min): 1.7x
+
+════════════════════════════════════════════════════════════════════════════════
+END OF REPORT
+════════════════════════════════════════════════════════════════════════════════

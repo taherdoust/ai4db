@@ -59,7 +59,7 @@ from stage1_cim import CIM_SCHEMAS, CIM_PARAMETERS, generate_realistic_values
 
 
 # ============================================================================
-# CIM WIZARD SCHEMA CONSTRAINTS (SAME AS ECLAB VERSION)
+# CIM WIZARD SCHEMA CONSTRAINTS
 # ============================================================================
 
 class CIMSchemaRules:
@@ -381,7 +381,7 @@ class CTGANTrainerIPAZIA:
         )
         
         # Train
-        print(f"\n[OK] Training CTGAN (this will take 2-4 hours with GPU)...")
+        print(f"\n[OK] Training CTGAN (this will take 0.5 hours with GPU)...")
         start_time = datetime.now()
         
         self.synthesizer.fit(df)

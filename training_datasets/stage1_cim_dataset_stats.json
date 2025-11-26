@@ -1,75 +1,97 @@
 {
   "dataset_info": {
-    "total_samples": 7600,
-    "evaluation_samples": 100,
-    "training_samples": 7500,
-    "generation_date": "2025-10-28T13:20:35.570068"
+    "total_samples": 144,
+    "evaluation_samples": 0,
+    "training_samples": 144,
+    "generation_date": "2025-11-25T15:37:09.822540"
   },
   "priority_distribution": {
-    "Priority_1": 4200,
-    "Priority_3": 1200,
-    "Priority_2": 2200
+    "Priority_1": 63,
+    "Priority_3": 18,
+    "Priority_2": 63
   },
   "sql_types": {
-    "SIMPLE_SELECT": 2200,
-    "MULTI_JOIN": 1400,
-    "NESTED_QUERY": 1200,
-    "SPATIAL_MEASUREMENT": 800,
-    "AGGREGATION": 800,
-    "RASTER_VECTOR": 800,
-    "SPATIAL_JOIN": 200,
-    "SPATIAL_CLUSTERING": 200
+    "SIMPLE_SELECT": 57,
+    "MULTI_JOIN": 21,
+    "AGGREGATION": 18,
+    "NESTED_QUERY": 18,
+    "SPATIAL_MEASUREMENT": 12,
+    "RASTER_VECTOR": 12,
+    "SPATIAL_JOIN": 3,
+    "SPATIAL_CLUSTERING": 3
   },
   "question_tones": {
-    "ANALYTICAL": 2200,
-    "DIRECT": 2000,
-    "AGGREGATE": 1600,
-    "SPATIAL_SPECIFIC": 800,
-    "INTERROGATIVE": 400,
-    "TEMPORAL": 400,
-    "CONDITIONAL": 200
+    "ANALYTICAL": 42,
+    "DIRECT": 39,
+    "AGGREGATE": 33,
+    "SPATIAL_SPECIFIC": 12,
+    "TEMPORAL": 9,
+    "INTERROGATIVE": 6,
+    "CONDITIONAL": 3
   },
-  "difficulty_levels": {
-    "EASY": 6200,
-    "MEDIUM": 1400
+  "sql_complexity": {
+    "SIMPLE": 108,
+    "INTERMEDIATE": 36
   },
-  "complexity_levels": {
-    "A": 4000,
-    "B": 1800,
-    "C": 1800
-  },
-  "usage_frequency": {
-    "frequent": 4800,
-    "low_frequent": 2800
-  },
-  "spatial_functions": {
-    "ST_AREA": 2400,
-    "ST_INTERSECTS": 1800,
-    "ST_CENTROID": 1200,
-    "ST_DISTANCE": 1000,
-    "ST_SUMMARYSTATS": 600,
-    "ST_SETSRID": 400,
-    "ST_MAKEPOINT": 400,
-    "ST_WITHIN": 400,
-    "ST_INTERSECTION": 400,
-    "ST_CLIP": 400,
-    "ST_X": 200,
-    "ST_Y": 200,
-    "ST_YEAR": 200,
-    "ST_DWITHIN": 200,
-    "ST_BUFFER": 200,
-    "ST_CLUSTERDBSCAN": 200,
-    "ST_VALUE": 200,
-    "ST_TRANSITION_ADVANCED": 200,
-    "ST_UNION": 200
-  },
-  "function_usage_frequency": {
-    "frequent": 10800
-  },
-  "function_data_types": {
-    "vector_only": 10800
+  "spatial_sql_complexity": {
+    "NONE": 81,
+    "INTERMEDIATE": 27,
+    "BASIC": 24,
+    "ADVANCED": 12
   },
   "schema_complexity": {
-    "MULTI_SCHEMA": 7600
+    "MULTI_SCHEMA_WITH_CIM_VECTOR": 126,
+    "MULTI_SCHEMA_WITHOUT_CIM_VECTOR": 18
+  },
+  "sql_frequency": {
+    "VERY_HIGH": 75,
+    "LOW": 39,
+    "VERY_LOW": 15,
+    "MEDIUM": 12,
+    "HIGH": 3
+  },
+  "spatial_frequency": {
+    "NONE": 69,
+    "HIGH": 42,
+    "VERY_HIGH": 15,
+    "VERY_LOW": 15,
+    "LOW": 3
+  },
+  "schema_frequency": {
+    "HIGH": 126,
+    "VERY_LOW": 18
+  },
+  "spatial_functions": {
+    "ST_AREA": 36,
+    "ST_INTERSECTS": 27,
+    "ST_CENTROID": 18,
+    "ST_DISTANCE": 15,
+    "ST_SUMMARYSTATS": 9,
+    "ST_SETSRID": 6,
+    "ST_MAKEPOINT": 6,
+    "ST_WITHIN": 6,
+    "ST_INTERSECTION": 6,
+    "ST_CLIP": 6,
+    "ST_Y": 3,
+    "ST_X": 3,
+    "ST_YEAR": 3,
+    "ST_PERIOD_CENSUS": 3,
+    "ST_DWITHIN": 3,
+    "ST_BUFFER": 3,
+    "ST_CLUSTERDBSCAN": 3,
+    "ST_VALUE": 3,
+    "ST_TRANSITION_ADVANCED": 3,
+    "ST_UNION": 3
+  },
+  "function_data_types": {
+    "vector_only": 165
+  },
+  "limit_distribution": {
+    "FULL_RESULTS": 126,
+    "ORDERED_ONLY": 11,
+    "TOP_N": 7
+  },
+  "sample_types": {
+    "POSITIVE": 144
   }
 }

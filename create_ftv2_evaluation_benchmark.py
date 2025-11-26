@@ -1510,10 +1510,10 @@ def main():
         sql_type_targets = {k: v for k, v in sql_type_targets.items() if k in available_sql_types}
         print(f"\nEasy mode SQL type targets (90% SIMPLE_SELECT): {sql_type_targets}")
     else:
-        sql_type_targets = {
-            sql_type: max(SQL_TYPE_MIN_DEFAULTS.get(sql_type, 1), 1)
-            for sql_type in available_sql_types
-        }
+    sql_type_targets = {
+        sql_type: max(SQL_TYPE_MIN_DEFAULTS.get(sql_type, 1), 1)
+        for sql_type in available_sql_types
+    }
     
     if args.min_spatial_join:
         if 'SPATIAL_JOIN' in sql_type_targets:

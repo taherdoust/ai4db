@@ -1,0 +1,10 @@
+{
+  "total_samples": 10000,
+  "label_distribution": {
+    "AMBIGUOUS": 6500,
+    "OUT_OF_SCOPE": 3500
+  },
+  "avg_question_length": 41.5278,
+  "min_question_length": 2,
+  "max_question_length": 111
+}

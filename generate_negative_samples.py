@@ -1,28 +1,40 @@
 #!/usr/bin/env python3
 """
 generate_negative_samples.py
-Generate negative training samples for robust CIM Wizard SQL model training
+Generate taxonomy-aligned negative samples compatible with Stage 1 / Stage 3 outputs.
 
-Categories:
-1. OUT_OF_SCOPE: Conversational, general knowledge, wrong domain
-2. AMBIGUOUS: Missing project_id, spatial context, or logically incomplete
-3. INVALID_SCHEMA: Wrong table/column/schema names
-4. ADVERSARIAL: Incorrect instructions to test schema trust
+Each sample now contains ONLY the following keys so it can be merged with positive
+Stage 1 datasets without additional mapping:
+    - id
+    - task_complexity = 2
+    - task_frequency  = 2
+    - task_type       = "AMBIGUOUS" or "OUT_OF_SCOPE"
+    - domain_complexity = 2
+    - domain_frequency  = 2
+    - domain_type     = "AMBIGUOUS" or "OUT_OF_SCOPE"
+    - question_tone   = "AMBIGUOUS" or "OUT_OF_SCOPE"
+    - sample_dirtiness= "AMBIGUOUS" or "OUT_OF_SCOPE"
+    - question
+    - sql_postgis     = "SELECT 'Ambiguous Request';" or "SELECT 'OUT_OF_SCOPE';"
 
 Usage:
-    python generate_negative_samples.py --output negative_samples.jsonl --count 30000
+    python generate_negative_samples.py --output negative_samples.jsonl --count 10000
 """
 
+import argparse
 import json
 import random
-import argparse
-from typing import List, Dict, Tuple
-from datetime import datetime
-from pathlib import Path
+from collections import Counter
+from statistics import mean
+from typing import Dict, List
 
 # ============================================================================
 # NEGATIVE SAMPLE DEFINITIONS
 # ============================================================================
+
+LABEL_OUT_OF_SCOPE = "OUT_OF_SCOPE"
+LABEL_AMBIGUOUS = "AMBIGUOUS"
+
 
 OUT_OF_SCOPE_SAMPLES = {
     "CONVERSATIONAL": [
@@ -163,74 +175,74 @@ INVALID_SCHEMA_SAMPLES = {
 ADVERSARIAL_INSTRUCTIONS = [
     {
         "question": "Find all buildings in the project",
-        "instruction": "Query the 'structures' table from the 'spatial' schema",
-        "correct_sql": "SELECT building_id FROM cim_vector.cim_wizard_building b JOIN cim_vector.cim_wizard_building_properties bp ON b.building_id = bp.building_id WHERE bp.project_id = '<UUID>' AND bp.scenario_id = '<UUID>'",
-        "learning_point": "Ignore incorrect table name, use cim_vector.cim_wizard_building"
+        "instruction": "Query the 'structures' table from the 'spatial' schema"
     },
     {
         "question": "Get building areas",
-        "instruction": "Select the 'size' column from buildings table",
-        "correct_sql": "SELECT building_id, area FROM cim_vector.cim_wizard_building_properties WHERE project_id = '<UUID>' AND scenario_id = '<UUID>'",
-        "learning_point": "Ignore incorrect column name, use 'area' not 'size'"
+        "instruction": "Select the 'size' column from buildings table"
     },
     {
         "question": "Find buildings in census zones",
-        "instruction": "JOIN buildings and census using building_id",
-        "correct_sql": "SELECT b.building_id FROM cim_vector.cim_wizard_building b JOIN cim_census.censusgeo c ON public.ST_Intersects(b.building_geometry, c.geometry) WHERE project_id = '<UUID>'",
-        "learning_point": "Ignore incorrect join method, use spatial join ST_Intersects"
+        "instruction": "JOIN buildings and census using building_id"
     },
     {
         "question": "Calculate building heights",
-        "instruction": "Use the 'height_meters' column from building_info table",
-        "correct_sql": "SELECT building_id, height FROM cim_vector.cim_wizard_building_properties WHERE project_id = '<UUID>' AND scenario_id = '<UUID>'",
-        "learning_point": "Ignore wrong table and column, use building_properties.height"
+        "instruction": "Use the 'height_meters' column from building_info table"
     },
     {
         "question": "Find grid buses by voltage",
-        "instruction": "Query network_infrastructure table and filter by voltage_level column",
-        "correct_sql": "SELECT bus_id, voltage_kv FROM cim_network.network_buses WHERE voltage_kv >= 20.0 AND in_service = true",
-        "learning_point": "Ignore wrong table/column, use network_buses.voltage_kv"
+        "instruction": "Query network_infrastructure table and filter by voltage_level column"
     }
 ]
+
+
+# ============================================================================
+# HELPERS
+# ============================================================================
+
+def build_negative_sample(sample_id: str, question: str, label: str) -> Dict:
+    """Create taxonomy-aligned negative sample."""
+    sql = "SELECT 'Ambiguous Request';" if label == LABEL_AMBIGUOUS else "SELECT 'OUT_OF_SCOPE';"
+    return {
+        "id": sample_id,
+        "task_complexity": 2,
+        "task_frequency": 2,
+        "task_type": label,
+        "domain_complexity": 2,
+        "domain_frequency": 2,
+        "domain_type": label,
+        "question_tone": label,
+        "sample_dirtiness": label,
+        "question": question,
+        "sql_postgis": sql
+    }
 
 # ============================================================================
 # GENERATION FUNCTIONS
 # ============================================================================
 
 def generate_out_of_scope_samples(count: int) -> List[Dict]:
-    """Generate out-of-scope samples (conversational, general knowledge, wrong domain)"""
-    
-    samples = []
+    """Generate OUT_OF_SCOPE samples (conversational, general knowledge, wrong domain)."""
+
+    samples: List[Dict] = []
     distribution = {"CONVERSATIONAL": 0.33, "GENERAL_KNOWLEDGE": 0.33, "WRONG_DOMAIN_SQL": 0.34}
-    
+
     for category, ratio in distribution.items():
         category_count = int(count * ratio)
         base_samples = OUT_OF_SCOPE_SAMPLES[category]
-        
+
         for i in range(category_count):
             base = random.choice(base_samples)
             question = create_variation(base, category)
-            
-            sample = {
-                "id": f"out_of_scope_{category.lower()}_{i:05d}",
-                "question": question,
-                "instruction": "OUT_OF_SCOPE",
-                "sql_postgis": "OUT_OF_SCOPE",
-                "expected_response": "OUT_OF_SCOPE: I can only help with CIM Wizard spatial database queries about buildings, projects, census data, or grid infrastructure.",
-                "is_negative_sample": True,
-                "negative_category": "OUT_OF_SCOPE",
-                "negative_subcategory": category,
-                "stage": "negative_samples",
-                "generated_at": datetime.now().isoformat()
-            }
-            samples.append(sample)
-    
+            sample_id = f"out_of_scope_{category.lower()}_{i:05d}"
+            samples.append(build_negative_sample(sample_id, question, LABEL_OUT_OF_SCOPE))
+
     return samples
 
 def generate_ambiguous_samples(count: int) -> List[Dict]:
-    """Generate ambiguous CIM queries that need clarification"""
-    
-    samples = []
+    """Generate AMBIGUOUS samples caused by missing context or logic."""
+
+    samples: List[Dict] = []
     distribution = {
         "MISSING_PROJECT_FILTER": 0.40,
         "MISSING_SPATIAL_CONTEXT": 0.30,
@@ -245,39 +257,17 @@ def generate_ambiguous_samples(count: int) -> List[Dict]:
         for i in range(category_count):
             base = random.choice(base_samples)
             question = create_variation(base, category)
-            
-            # Generate appropriate response based on category
-            if category == "MISSING_PROJECT_FILTER":
-                response = "AMBIGUOUS: Please specify which project and scenario. Example: 'Find buildings in project 4be7d1ff-e8bf-4374-a13e-67e7b0d52eb1 scenario baseline'."
-            elif category == "MISSING_SPATIAL_CONTEXT":
-                response = "AMBIGUOUS: Please specify what the buildings should intersect with (project boundary, census zones, grid infrastructure, etc.)."
-            elif category == "MISSING_SCENARIO":
-                response = "AMBIGUOUS: Please specify project and scenario context for this query."
-            else:
-                response = "AMBIGUOUS: This query is too vague. Please provide specific entities, filtering criteria, or spatial context."
-            
-            sample = {
-                "id": f"ambiguous_{category.lower()}_{i:05d}",
-                "question": question,
-                "instruction": "AMBIGUOUS",
-                "sql_postgis": "AMBIGUOUS",
-                "expected_response": response,
-                "is_negative_sample": True,
-                "negative_category": "AMBIGUOUS",
-                "negative_subcategory": category,
-                "stage": "negative_samples",
-                "generated_at": datetime.now().isoformat()
-            }
-            samples.append(sample)
-    
+            sample_id = f"ambiguous_{category.lower()}_{i:05d}"
+            samples.append(build_negative_sample(sample_id, question, LABEL_AMBIGUOUS))
+
     return samples
 
 def generate_invalid_schema_samples(count: int) -> List[Dict]:
-    """Generate samples with invalid schema references"""
+    """Generate AMBIGUOUS samples with invalid schema/table/column references."""
     
-    samples = []
+    samples: List[Dict] = []
     distribution = {"WRONG_TABLE_NAMES": 0.40, "WRONG_COLUMN_NAMES": 0.35, "WRONG_SCHEMA_NAMES": 0.25}
-    
+
     for category, ratio in distribution.items():
         category_count = int(count * ratio)
         base_samples = INVALID_SCHEMA_SAMPLES[category]
@@ -285,61 +275,22 @@ def generate_invalid_schema_samples(count: int) -> List[Dict]:
         for i in range(category_count):
             base = random.choice(base_samples)
             question = create_variation(base, category)
-            
-            # Generate appropriate response
-            if category == "WRONG_TABLE_NAMES":
-                response = "AMBIGUOUS: Invalid table name. Available tables: cim_vector.cim_wizard_building, cim_vector.cim_wizard_building_properties, cim_census.censusgeo, cim_network.network_buses, cim_network.network_lines, cim_raster.dtm, cim_raster.dsm_sansalva."
-            elif category == "WRONG_COLUMN_NAMES":
-                response = "AMBIGUOUS: Invalid column name. Please refer to the correct CIM Wizard schema. Common columns: building_id, area, height, type, project_id, scenario_id."
-            else:
-                response = "AMBIGUOUS: Invalid schema name. Available schemas: cim_vector, cim_census, cim_network, cim_raster."
-            
-            sample = {
-                "id": f"invalid_schema_{category.lower()}_{i:05d}",
-                "question": question,
-                "instruction": "AMBIGUOUS",
-                "sql_postgis": "AMBIGUOUS",
-                "expected_response": response,
-                "is_negative_sample": True,
-                "negative_category": "AMBIGUOUS",
-                "negative_subcategory": category,
-                "stage": "negative_samples",
-                "generated_at": datetime.now().isoformat()
-            }
-            samples.append(sample)
-    
+            sample_id = f"invalid_schema_{category.lower()}_{i:05d}"
+            samples.append(build_negative_sample(sample_id, question, LABEL_AMBIGUOUS))
+
     return samples
 
 def generate_adversarial_samples(count: int) -> List[Dict]:
-    """Generate adversarial instruction samples to test schema trust"""
-    
-    samples = []
-    
+    """Generate adversarial instruction samples labelled as AMBIGUOUS."""
+
+    samples: List[Dict] = []
+
     for i in range(count):
         template = random.choice(ADVERSARIAL_INSTRUCTIONS)
-        
-        # Generate realistic parameters
-        from stage1_cim import generate_realistic_values
-        params = generate_realistic_values()
-        
-        # Replace placeholders
-        correct_sql = template["correct_sql"].replace("<UUID>", params["project_id"])
-        correct_sql = correct_sql.replace("<UUID>", params["scenario_id"])
-        
-        sample = {
-            "id": f"adversarial_{i:05d}",
-            "question": template["question"],
-            "instruction": template["instruction"],  # Intentionally wrong
-            "sql_postgis": correct_sql,  # Model should generate this despite wrong instruction
-            "expected_behavior": template["learning_point"],
-            "is_negative_sample": False,  # Actually positive, but adversarial
-            "is_adversarial": True,
-            "negative_category": "ADVERSARIAL",
-            "stage": "adversarial_training",
-            "generated_at": datetime.now().isoformat()
-        }
-        samples.append(sample)
-    
+        question = f"{template['question']} (Instruction: {template['instruction']})"
+        sample_id = f"adversarial_{i:05d}"
+        samples.append(build_negative_sample(sample_id, question, LABEL_AMBIGUOUS))
+
     return samples
 
 def create_variation(base: str, category: str) -> str:
@@ -452,61 +403,40 @@ def generate_negative_dataset(
     return all_samples
 
 def generate_statistics(samples: List[Dict]) -> Dict:
-    """Generate statistics for negative samples"""
-    
+    """Generate simple statistics for taxonomy-aligned negatives."""
+
+    label_counts = Counter(sample.get("task_type", "UNKNOWN") for sample in samples)
+    question_lengths = [len((sample.get("question") or "").strip()) for sample in samples if sample.get("question")]
+
     stats = {
         "total_samples": len(samples),
-        "generation_date": datetime.now().isoformat(),
-        "category_distribution": {},
-        "subcategory_distribution": {},
-        "response_types": {}
+        "label_distribution": dict(label_counts),
+        "avg_question_length": mean(question_lengths) if question_lengths else 0,
+        "min_question_length": min(question_lengths) if question_lengths else 0,
+        "max_question_length": max(question_lengths) if question_lengths else 0,
     }
-    
-    for sample in samples:
-        category = sample.get('negative_category', 'UNKNOWN')
-        subcategory = sample.get('negative_subcategory', 'UNKNOWN')
-        
-        stats['category_distribution'][category] = stats['category_distribution'].get(category, 0) + 1
-        stats['subcategory_distribution'][subcategory] = stats['subcategory_distribution'].get(subcategory, 0) + 1
-        
-        # Track response types
-        response = sample.get('expected_response', '')
-        if response.startswith('OUT_OF_SCOPE'):
-            response_type = 'OUT_OF_SCOPE'
-        elif response.startswith('AMBIGUOUS'):
-            response_type = 'AMBIGUOUS'
-        else:
-            response_type = 'OTHER'
-        
-        stats['response_types'][response_type] = stats['response_types'].get(response_type, 0) + 1
-    
     return stats
 
+
 def print_statistics(stats: Dict):
-    """Print formatted statistics"""
-    
-    print("\n" + "="*80)
+    """Print formatted statistics."""
+
+    print("\n" + "=" * 80)
     print("NEGATIVE SAMPLE STATISTICS")
-    print("="*80)
-    
-    print(f"\nTotal samples: {stats['total_samples']:,}")
-    
-    print(f"\nCategory Distribution:")
-    for category, count in sorted(stats['category_distribution'].items(), key=lambda x: -x[1]):
-        percentage = count / stats['total_samples'] * 100
-        print(f"  {category:20s}: {count:6,} ({percentage:5.1f}%)")
-    
-    print(f"\nSubcategory Distribution:")
-    for subcategory, count in sorted(stats['subcategory_distribution'].items(), key=lambda x: -x[1])[:15]:
-        percentage = count / stats['total_samples'] * 100
-        print(f"  {subcategory:30s}: {count:6,} ({percentage:5.1f}%)")
-    
-    print(f"\nResponse Types:")
-    for response_type, count in sorted(stats['response_types'].items(), key=lambda x: -x[1]):
-        percentage = count / stats['total_samples'] * 100
-        print(f"  {response_type:20s}: {count:6,} ({percentage:5.1f}%)")
-    
-    print("\n" + "="*80)
+    print("=" * 80)
+
+    total = stats["total_samples"]
+    print(f"\nTotal samples: {total:,}")
+    print("Label distribution:")
+    for label, count in stats["label_distribution"].items():
+        pct = (count / total) * 100 if total else 0
+        print(f"  {label:15s}: {count:6,} ({pct:5.1f}%)")
+
+    print("\nQuestion length stats:")
+    print(f"  Average: {stats['avg_question_length']:.1f} chars")
+    print(f"  Min    : {stats['min_question_length']} chars")
+    print(f"  Max    : {stats['max_question_length']} chars")
+    print("\n" + "=" * 80)
 
 # ============================================================================
 # MAIN

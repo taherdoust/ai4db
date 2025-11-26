@@ -70,6 +70,22 @@ DOMAIN_TAXONOMY = {
     "MULTI_SCHEMA_COMPLEX": {"complexity": 3, "frequency": 3, "description": "Three or more schemas combined"}
 }
 
+# Question tones (including negative sample tones)
+QUESTION_TONES = {
+    "INTERROGATIVE": "Questions starting with what, which, where, how, etc.",
+    "DIRECT": "Imperative statements (find, get, list, show, etc.)",
+    "DESCRIPTIVE": "Other descriptive requests",
+    "AMBIGUOUS": "Ambiguous queries missing required context (negative samples)",
+    "OUT_OF_SCOPE": "Out-of-scope queries irrelevant to CIM database (negative samples)"
+}
+
+# Sample dirtiness (data quality classification)
+SAMPLE_DIRTINESS = {
+    "CLEAN": "Valid positive samples with correct SQL",
+    "AMBIGUOUS": "Negative samples with missing context or invalid schema references",
+    "OUT_OF_SCOPE": "Negative samples completely irrelevant to CIM database"
+}
+
 # Spatial function patterns
 SPATIAL_PATTERNS = {
     "predicates": [r'ST_Intersects', r'ST_Contains', r'ST_Within', r'ST_Touches', r'ST_Equals', r'ST_Covers', r'ST_CoveredBy'],
@@ -230,25 +246,52 @@ def get_spatial_functions(sql: str) -> List[str]:
 
 
 def classify_sample(sample: Dict[str, Any]) -> Dict[str, Any]:
-    """Classify a sample with full taxonomy."""
+    """Classify a sample with full taxonomy including question_tone and sample_dirtiness."""
     sql = sample.get('sql') or sample.get('sql_postgis', '')
     question = sample.get('question', '')
     
-    task_type, task_meta = classify_task_type(sql)
-    domain_type, domain_meta = classify_domain_type(sql)
-    question_tone = classify_question_tone(question)
+    # Use original sample's taxonomy if available
+    if 'task_type' in sample:
+        task_type = sample['task_type']
+        task_complexity = sample.get('task_complexity', 1)
+        task_frequency = sample.get('task_frequency', 1)
+        task_description = TASK_TAXONOMY.get(task_type, {}).get('description', '')
+    else:
+        task_type, task_meta = classify_task_type(sql)
+        task_complexity = task_meta["complexity"]
+        task_frequency = task_meta["frequency"]
+        task_description = task_meta["description"]
+    
+    if 'domain_type' in sample:
+        domain_type = sample['domain_type']
+        domain_complexity = sample.get('domain_complexity', 1)
+        domain_frequency = sample.get('domain_frequency', 1)
+        domain_description = DOMAIN_TAXONOMY.get(domain_type, {}).get('description', '')
+    else:
+        domain_type, domain_meta = classify_domain_type(sql)
+        domain_complexity = domain_meta["complexity"]
+        domain_frequency = domain_meta["frequency"]
+        domain_description = domain_meta["description"]
+    
+    # Use original question_tone if available (includes AMBIGUOUS, OUT_OF_SCOPE)
+    question_tone = sample.get('question_tone', classify_question_tone(question))
+    
+    # Use original sample_dirtiness if available
+    sample_dirtiness = sample.get('sample_dirtiness', 'CLEAN')
+    
     spatial_funcs = get_spatial_functions(sql)
     
     return {
         "task_type": task_type,
-        "task_complexity": task_meta["complexity"],
-        "task_frequency": task_meta["frequency"],
-        "task_description": task_meta["description"],
+        "task_complexity": task_complexity,
+        "task_frequency": task_frequency,
+        "task_description": task_description,
         "domain_type": domain_type,
-        "domain_complexity": domain_meta["complexity"],
-        "domain_frequency": domain_meta["frequency"],
-        "domain_description": domain_meta["description"],
+        "domain_complexity": domain_complexity,
+        "domain_frequency": domain_frequency,
+        "domain_description": domain_description,
         "question_tone": question_tone,
+        "sample_dirtiness": sample_dirtiness,
         "spatial_functions": spatial_funcs,
         "spatial_function_count": len(spatial_funcs)
     }
@@ -559,6 +602,7 @@ def create_benchmark_with_execution(
             'domain_frequency': sample['taxonomy']['domain_frequency'],
             'domain_description': sample['taxonomy']['domain_description'],
             'question_tone': sample['taxonomy']['question_tone'],
+            'sample_dirtiness': sample['taxonomy']['sample_dirtiness'],
             
             # Spatial metadata
             'spatial_functions': sample['taxonomy']['spatial_functions'],
@@ -609,6 +653,8 @@ def save_benchmark(benchmark: List[Dict[str, Any]], output_file: Path):
     task_counts = Counter(item['task_type'] for item in benchmark)
     domain_counts = Counter(item['domain_type'] for item in benchmark)
     complexity_counts = Counter(item['task_complexity'] for item in benchmark)
+    question_tone_counts = Counter(item['question_tone'] for item in benchmark)
+    sample_dirtiness_counts = Counter(item.get('sample_dirtiness', 'CLEAN') for item in benchmark)
     
     metadata = {
         'benchmark_version': 'v2_taxonomy_based',
@@ -619,6 +665,8 @@ def save_benchmark(benchmark: List[Dict[str, Any]], output_file: Path):
         'task_type_distribution': dict(task_counts),
         'domain_type_distribution': dict(domain_counts),
         'task_complexity_distribution': dict(complexity_counts),
+        'question_tone_distribution': dict(question_tone_counts),
+        'sample_dirtiness_distribution': dict(sample_dirtiness_counts),
         'evaluation_modes': ['Q2SQL', 'EA (Eventual Accuracy)'],
         'metrics': ['EM', 'EX', 'EA', 'Deep EM', 'SC']
     }

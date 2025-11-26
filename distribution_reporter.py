@@ -100,13 +100,25 @@ DOMAIN_TAXONOMY = {
 }
 
 # ============================================================================
-# QUESTION TONES
+# QUESTION TONES (including negative sample tones)
 # ============================================================================
 
 QUESTION_TONES = {
     "INTERROGATIVE": "Questions starting with what, which, where, how, etc.",
     "DIRECT": "Imperative statements (find, get, list, show, etc.)",
-    "DESCRIPTIVE": "Other descriptive requests"
+    "DESCRIPTIVE": "Other descriptive requests",
+    "AMBIGUOUS": "Ambiguous queries missing required context (negative samples)",
+    "OUT_OF_SCOPE": "Out-of-scope queries irrelevant to CIM database (negative samples)"
+}
+
+# ============================================================================
+# SAMPLE DIRTINESS (data quality classification)
+# ============================================================================
+
+SAMPLE_DIRTINESS = {
+    "CLEAN": "Valid positive samples with correct SQL",
+    "AMBIGUOUS": "Negative samples with missing context or invalid schema references",
+    "OUT_OF_SCOPE": "Negative samples completely irrelevant to CIM database"
 }
 
 # ============================================================================
@@ -331,27 +343,70 @@ def get_spatial_functions(sql: str) -> List[str]:
     return re.findall(r'ST_\w+', sql, re.IGNORECASE)
 
 
-def classify_sample(sql: str, question: str) -> Dict[str, Any]:
+def classify_sample(sql: str, question: str, original_sample: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """
     Classify a sample with full taxonomy information.
-    Returns classification dictionary with task, domain, and question tone.
+    Returns classification dictionary with task, domain, question tone, and sample dirtiness.
+    If original_sample is provided, uses its taxonomy fields if available.
     """
-    task_type, task_meta = classify_task_type(sql)
-    domain_type, domain_meta = classify_domain_type(sql)
-    question_tone = classify_question_tone(question)
+    # Use original sample's taxonomy if available, otherwise classify from SQL
+    if original_sample:
+        # Check if original has taxonomy fields (from stage1/stage3)
+        if 'task_type' in original_sample:
+            task_type = original_sample['task_type']
+            task_complexity = original_sample.get('task_complexity', 1)
+            task_frequency = original_sample.get('task_frequency', 1)
+            task_description = TASK_TAXONOMY.get(task_type, {}).get('description', '')
+        else:
+            task_type, task_meta = classify_task_type(sql)
+            task_complexity = task_meta["complexity"]
+            task_frequency = task_meta["frequency"]
+            task_description = task_meta["description"]
+        
+        if 'domain_type' in original_sample:
+            domain_type = original_sample['domain_type']
+            domain_complexity = original_sample.get('domain_complexity', 1)
+            domain_frequency = original_sample.get('domain_frequency', 1)
+            domain_description = DOMAIN_TAXONOMY.get(domain_type, {}).get('description', '')
+        else:
+            domain_type, domain_meta = classify_domain_type(sql)
+            domain_complexity = domain_meta["complexity"]
+            domain_frequency = domain_meta["frequency"]
+            domain_description = domain_meta["description"]
+        
+        # Use original question_tone if available (includes AMBIGUOUS, OUT_OF_SCOPE)
+        question_tone = original_sample.get('question_tone', classify_question_tone(question))
+        
+        # Use original sample_dirtiness if available
+        sample_dirtiness = original_sample.get('sample_dirtiness', 'CLEAN')
+    else:
+        task_type, task_meta = classify_task_type(sql)
+        task_complexity = task_meta["complexity"]
+        task_frequency = task_meta["frequency"]
+        task_description = task_meta["description"]
+        
+        domain_type, domain_meta = classify_domain_type(sql)
+        domain_complexity = domain_meta["complexity"]
+        domain_frequency = domain_meta["frequency"]
+        domain_description = domain_meta["description"]
+        
+        question_tone = classify_question_tone(question)
+        sample_dirtiness = 'CLEAN'
+    
     schemas = get_schemas_used(sql)
     spatial_funcs = get_spatial_functions(sql)
     
     return {
         "task_type": task_type,
-        "task_complexity": task_meta["complexity"],
-        "task_frequency": task_meta["frequency"],
-        "task_description": task_meta["description"],
+        "task_complexity": task_complexity,
+        "task_frequency": task_frequency,
+        "task_description": task_description,
         "domain_type": domain_type,
-        "domain_complexity": domain_meta["complexity"],
-        "domain_frequency": domain_meta["frequency"],
-        "domain_description": domain_meta["description"],
+        "domain_complexity": domain_complexity,
+        "domain_frequency": domain_frequency,
+        "domain_description": domain_description,
         "question_tone": question_tone,
+        "sample_dirtiness": sample_dirtiness,
         "schemas_used": schemas,
         "spatial_functions": spatial_funcs
     }
@@ -423,6 +478,7 @@ class DistributionAnalyzer:
         self.domain_complexity = Counter()
         self.domain_frequency = Counter()
         self.question_tones = Counter()
+        self.sample_dirtiness = Counter()
         self.schemas = Counter()
         self.spatial_functions = Counter()
         
@@ -445,11 +501,12 @@ class DistributionAnalyzer:
         self.domain_complexity[classification['domain_complexity']] += 1
         self.domain_frequency[classification['domain_frequency']] += 1
         self.question_tones[classification['question_tone']] += 1
+        self.sample_dirtiness[classification.get('sample_dirtiness', 'CLEAN')] += 1
         
-        for schema in classification['schemas_used']:
+        for schema in classification.get('schemas_used', []):
             self.schemas[schema] += 1
         
-        for func in classification['spatial_functions']:
+        for func in classification.get('spatial_functions', []):
             self.spatial_functions[func.upper()] += 1
         
         # Cross-tabulation
@@ -467,6 +524,7 @@ class DistributionAnalyzer:
             'domain_complexity': dict(self.domain_complexity),
             'domain_frequency': dict(self.domain_frequency),
             'question_tones': dict(self.question_tones),
+            'sample_dirtiness': dict(self.sample_dirtiness),
             'schemas': dict(self.schemas),
             'spatial_functions': dict(self.spatial_functions.most_common(20)),
             'task_domain_cross': {k: dict(v) for k, v in self.task_domain_cross.items()},
@@ -630,6 +688,13 @@ def generate_report(analyzer: DistributionAnalyzer, input_path: str) -> str:
         analyzer.question_tones,
         total,
         QUESTION_TONES
+    ))
+    
+    lines.extend(format_distribution_table(
+        "SAMPLE DIRTINESS DISTRIBUTION",
+        analyzer.sample_dirtiness,
+        total,
+        SAMPLE_DIRTINESS
     ))
     
     # Top spatial functions
@@ -824,7 +889,7 @@ Examples:
     analyzer = DistributionAnalyzer()
     
     for sample in samples:
-        classification = classify_sample(sample['sql'], sample['question'])
+        classification = classify_sample(sample['sql'], sample['question'], sample.get('original'))
         analyzer.add_sample(classification)
     
     # Generate report

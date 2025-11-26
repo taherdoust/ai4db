@@ -191,9 +191,9 @@ def generate_realistic_values() -> Dict:
 class SqlPair:
     """SQL query pair with task and domain taxonomy tags"""
     template_id: str
-    sample_id_rule: str
-    sample_id_syntetized: str
-    sample_id_augmented: str
+    #sample_id_rule: str
+    #sample_id_syntetized: str
+    #sample_id_augmented: str
     task_complexity: int      # 1=Easy, 2=Medium, 3=Hard
     task_frequency: int       # 1=Very Frequent, 2=Frequent, 3=Rare
     domain_complexity: int    # 1=Easy, 2=Medium, 3=Hard

@@ -626,12 +626,17 @@ def generate_stage3_dataset(
         batch_size=batch_size
     )
     
+    # Shuffle samples for better batch diversity during fine-tuning
+    print(f"\n      Shuffling {len(augmented_samples):,} samples...")
+    random.shuffle(augmented_samples)
+    print(f"      Shuffled for better batch diversity")
+    
     # Save dataset
     print("\n[3/3] Saving dataset...")
     with open(output_file, 'w', encoding='utf-8') as f:
         for sample in augmented_samples:
             f.write(json.dumps(sample, ensure_ascii=False) + '\n')
-    print(f"      Saved to: {output_file}")
+    print(f"      Saved to: {output_file} (shuffled)")
     
     # Distribution analysis
     print("\n" + "="*80)

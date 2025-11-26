@@ -34,6 +34,10 @@ Thumbs.db
 # ========================================
 
 # Exclude ALL subdirectories under training_datasets/
+datasets_v3/
+
+training_datasets/
+
 training_datasets/downloaded/
 training_datasets/stage3-v1/
 checkpoint_analysis/

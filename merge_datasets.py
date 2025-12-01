@@ -30,7 +30,7 @@ import json
 import random
 import argparse
 from pathlib import Path
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Any, Tuple, Optional
 from collections import Counter, defaultdict
 from datetime import datetime
 import re
@@ -194,10 +194,10 @@ def standardize_sample(sample: Dict[str, Any], sample_type: str = 'POSITIVE') ->
     sql = sample.get('sql_postgis', '') or sample.get('sql', '')
     
     # Extract schemas and tables
-    schemas, tables = extract_schemas_and_tables(sql)
+    #schemas, tables = extract_schemas_and_tables(sql)
     
     # Extract spatial functions
-    spatial_functions = extract_spatial_functions(sql)
+    #spatial_functions = extract_spatial_functions(sql)
     
     # Create standardized sample
     standardized = {
@@ -205,44 +205,66 @@ def standardize_sample(sample: Dict[str, Any], sample_type: str = 'POSITIVE') ->
         'id': sample.get('id', f'sample_{random.randint(100000, 999999)}'),
         
         # 2. Classification fields
-        'sample_type': sample_type,
-        'schema_complexity': classify_schema_complexity(sql),
-        'sql_type': classify_sql_type(sql),
-        'schema_count': len(schemas),
-        'table_count': len(tables),
-        'join_count': sql.upper().count('JOIN'),
-        'function_count': len(re.findall(r'\w+\(', sql)),
-        'spatial_function_count': len(spatial_functions),
-        'spatial_functions': spatial_functions,
+        #'sample_type': sample_type,
+        #'schema_complexity': classify_schema_complexity(sql),
+        #'sql_type': classify_sql_type(sql),
+        #'schema_count': len(schemas),
+        #'table_count': len(tables),
+        #'join_count': sql.upper().count('JOIN'),
+        #'function_count': len(re.findall(r'\w+\(', sql)),
+        #'spatial_function_count': len(spatial_functions),
+        #'spatial_functions': spatial_functions,
         
         # Add top 15 spatial function flags
-        **create_spatial_function_flags(spatial_functions),
+        #**create_spatial_function_flags(spatial_functions),
         
         # 3. Question and instruction
         'question': sample.get('question', ''),
-        'instruction': sample.get('instruction', ''),
+        #'instruction': sample.get('instruction', ''),
         
         # 4. SQL
         'sql_postgis': sql,
         
         # 5. Quality and execution info
-        'quality_score': sample.get('quality_score', 1.0),
-        'no_error': sample.get('no_error', True),
-        'error_message': sample.get('error_message', None),
+        #'quality_score': sample.get('quality_score', 1.0),
+        #'no_error': sample.get('no_error', True),
+        #'error_message': sample.get('error_message', None),
         
         # 6. Metadata
-        'stage': sample.get('stage', 'unknown'),
-        'original_id': sample.get('id', ''),
+        #'stage': sample.get('stage', 'unknown'),
+        #'original_id': sample.get('id', ''),
         'merged_at': datetime.now().isoformat()
     }
     
-    # Add question tone if available
+    # Preserve taxonomy fields from original sample if available
+    # Task taxonomy
+    if 'task_type' in sample:
+        standardized['task_type'] = sample['task_type']
+    if 'task_complexity' in sample:
+        standardized['task_complexity'] = sample['task_complexity']
+    if 'task_frequency' in sample:
+        standardized['task_frequency'] = sample['task_frequency']
+    
+    # Domain taxonomy
+    if 'domain_type' in sample:
+        standardized['domain_type'] = sample['domain_type']
+    if 'domain_complexity' in sample:
+        standardized['domain_complexity'] = sample['domain_complexity']
+    if 'domain_frequency' in sample:
+        standardized['domain_frequency'] = sample['domain_frequency']
+    
+    # Question tone - preserve from original or classify
     if 'question_tone' in sample:
         standardized['question_tone'] = sample['question_tone']
     elif sample_type == 'NEGATIVE':
-        standardized['question_tone'] = 'IMPERATIVE'
+        # Negative samples should have AMBIGUOUS or OUT_OF_SCOPE tone
+        # Check sample_dirtiness to infer if not set
+        if sample.get('sample_dirtiness') == 'OUT_OF_SCOPE':
+            standardized['question_tone'] = 'OUT_OF_SCOPE'
+        else:
+            standardized['question_tone'] = 'AMBIGUOUS'  # Default for negative
     else:
-        # Try to classify question tone
+        # Try to classify question tone for positive samples
         question_lower = standardized['question'].lower()
         if any(q in question_lower for q in ['what', 'which', 'where', 'when', 'how']):
             standardized['question_tone'] = 'INTERROGATIVE'
@@ -250,6 +272,18 @@ def standardize_sample(sample: Dict[str, Any], sample_type: str = 'POSITIVE') ->
             standardized['question_tone'] = 'DIRECT'
         else:
             standardized['question_tone'] = 'DESCRIPTIVE'
+    
+    # CRITICAL: Preserve sample_dirtiness from original sample
+    if 'sample_dirtiness' in sample:
+        standardized['sample_dirtiness'] = sample['sample_dirtiness']
+    elif sample_type == 'NEGATIVE':
+        # For negative samples, infer from question_tone if not set
+        if standardized.get('question_tone') in ['AMBIGUOUS', 'OUT_OF_SCOPE']:
+            standardized['sample_dirtiness'] = standardized['question_tone']
+        else:
+            standardized['sample_dirtiness'] = 'AMBIGUOUS'  # Default for negative
+    else:
+        standardized['sample_dirtiness'] = 'CLEAN'  # Default for positive
     
     return standardized
 
@@ -280,58 +314,97 @@ def load_dataset(file_path: Path) -> List[Dict[str, Any]]:
 def merge_datasets(
     positive_samples: List[Dict[str, Any]],
     negative_samples: List[Dict[str, Any]],
-    target_size: int = 150000,
+    target_size: Optional[int] = None,
     negative_ratio: float = 0.20,
     random_seed: int = 42
 ) -> List[Dict[str, Any]]:
     """
-    Merge positive and negative samples with target distribution.
+    Merge positive and negative samples, respecting negative ratio.
+    
+    The function uses all available samples while maintaining the target negative ratio
+    as closely as possible. If target_size is provided, it acts as a maximum cap.
     
     Args:
         positive_samples: Positive training samples
         negative_samples: Negative training samples
-        target_size: Target total dataset size
+        target_size: Optional maximum total dataset size (if None, uses all available)
         negative_ratio: Target ratio of negative samples (0.20 = 20%)
         random_seed: Random seed for reproducibility
+    
+    Returns:
+        Merged dataset with actual size and ratio reported
     """
     random.seed(random_seed)
     
-    print(f"\nMerging datasets:")
-    print(f"  Target size: {target_size:,}")
-    print(f"  Negative ratio: {negative_ratio:.1%}")
-    
-    # Calculate target counts
-    target_negative = int(target_size * negative_ratio)
-    target_positive = target_size - target_negative
-    
-    print(f"  Target positive: {target_positive:,}")
-    print(f"  Target negative: {target_negative:,}")
-    
-    # Standardize and sample positive samples
+    # Standardize all samples first
     print("\nStandardizing positive samples...")
     standardized_positive = []
     for sample in positive_samples:
         standardized = standardize_sample(sample, sample_type='POSITIVE')
         standardized_positive.append(standardized)
     
-    # Sample positive samples if we have too many
-    if len(standardized_positive) > target_positive:
-        print(f"  Sampling {target_positive:,} from {len(standardized_positive):,} positive samples")
-        standardized_positive = random.sample(standardized_positive, target_positive)
-    else:
-        print(f"  Using all {len(standardized_positive):,} positive samples")
-    
-    # Standardize and sample negative samples
     print("\nStandardizing negative samples...")
     standardized_negative = []
     for sample in negative_samples:
         standardized = standardize_sample(sample, sample_type='NEGATIVE')
         standardized_negative.append(standardized)
     
-    # Sample negative samples if we have too many
-    if len(standardized_negative) > target_negative:
-        print(f"  Sampling {target_negative:,} from {len(standardized_negative):,} negative samples")
-        standardized_negative = random.sample(standardized_negative, target_negative)
+    available_positive = len(standardized_positive)
+    available_negative = len(standardized_negative)
+    
+    print(f"\nMerging datasets:")
+    print(f"  Available positive: {available_positive:,}")
+    print(f"  Available negative: {available_negative:,}")
+    print(f"  Target negative ratio: {negative_ratio:.1%}")
+    if target_size:
+        print(f"  Target max size: {target_size:,}")
+    
+    # Calculate how many negatives we need based on available positives
+    # To achieve negative_ratio: neg / (pos + neg) = ratio
+    # Solving: neg = pos * ratio / (1 - ratio)
+    if available_positive > 0:
+        required_negative = int(available_positive * negative_ratio / (1 - negative_ratio))
+    else:
+        required_negative = 0
+    
+    # Determine actual counts based on what's available
+    if available_negative >= required_negative:
+        # We have enough negatives - use required amount to maintain ratio
+        actual_negative = min(required_negative, available_negative)
+        actual_positive = available_positive
+    else:
+        # Not enough negatives - use all negatives, adjust positives to maintain ratio
+        actual_negative = available_negative
+        if actual_negative > 0:
+            # Calculate how many positives we need: pos = neg * (1 - ratio) / ratio
+            required_positive = int(actual_negative * (1 - negative_ratio) / negative_ratio)
+            actual_positive = min(required_positive, available_positive)
+        else:
+            # No negatives available - use all positives
+            actual_positive = available_positive
+    
+    # Apply target_size cap if provided
+    if target_size:
+        current_total = actual_positive + actual_negative
+        if current_total > target_size:
+            # Scale down proportionally while maintaining ratio
+            scale = target_size / current_total
+            actual_positive = int(actual_positive * scale)
+            actual_negative = int(actual_negative * scale)
+            # Ensure we don't exceed available samples
+            actual_positive = min(actual_positive, available_positive)
+            actual_negative = min(actual_negative, available_negative)
+    
+    # Sample if we have more than needed
+    if len(standardized_positive) > actual_positive:
+        print(f"  Sampling {actual_positive:,} from {len(standardized_positive):,} positive samples")
+        standardized_positive = random.sample(standardized_positive, actual_positive)
+    else:
+        print(f"  Using all {len(standardized_positive):,} positive samples")
+    
+    if len(standardized_negative) > actual_negative:
+        print(f"  Sampling {actual_negative:,} from {len(standardized_negative):,} negative samples")
+        standardized_negative = random.sample(standardized_negative, actual_negative)
     else:
         print(f"  Using all {len(standardized_negative):,} negative samples")
     
@@ -339,10 +412,19 @@ def merge_datasets(
     merged = standardized_positive + standardized_negative
     random.shuffle(merged)
     
+    actual_ratio = len(standardized_negative) / len(merged) if merged else 0
+    
     print(f"\nMerged dataset:")
     print(f"  Total samples: {len(merged):,}")
     print(f"  Positive: {len(standardized_positive):,} ({len(standardized_positive)/len(merged)*100:.1f}%)")
     print(f"  Negative: {len(standardized_negative):,} ({len(standardized_negative)/len(merged)*100:.1f}%)")
+    print(f"  Actual negative ratio: {actual_ratio:.1%}")
+    
+    if target_size and len(merged) < target_size:
+        print(f"  Note: Target size {target_size:,} not reached (only {len(merged):,} samples available)")
+    if abs(actual_ratio - negative_ratio) > 0.05:
+        print(f"  Warning: Actual ratio ({actual_ratio:.1%}) differs from target ({negative_ratio:.1%})")
+        print(f"           This is because available samples don't allow exact ratio matching.")
     
     return merged
 
@@ -473,8 +555,8 @@ def main():
                        help='Path to negative samples')
     parser.add_argument('--output', type=Path, required=True,
                        help='Output path for merged dataset')
-    parser.add_argument('--target_size', type=int, default=150000,
-                       help='Target total dataset size (default: 150000)')
+    parser.add_argument('--target_size', type=int, default=None,
+                       help='Optional maximum total dataset size. If not provided, uses all available samples while respecting negative ratio.')
     parser.add_argument('--negative_ratio', type=float, default=0.20,
                        help='Target ratio of negative samples (default: 0.20)')
     parser.add_argument('--seed', type=int, default=42,
@@ -488,7 +570,10 @@ def main():
     print(f"Positive samples: {args.positive}")
     print(f"Negative samples: {args.negative}")
     print(f"Output file: {args.output}")
-    print(f"Target size: {args.target_size:,}")
+    if args.target_size:
+        print(f"Target max size: {args.target_size:,}")
+    else:
+        print(f"Target max size: None (using all available samples)")
     print(f"Negative ratio: {args.negative_ratio:.1%}")
     
     # Load datasets

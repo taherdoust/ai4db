@@ -352,62 +352,144 @@ def group_by_taxonomy(samples: List[Dict[str, Any]]) -> Dict[str, Dict[str, List
 # SAMPLING STRATEGY
 # ============================================================================
 
-def stratified_sample_by_targets(
+def compute_source_distribution(samples: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Compute distribution from source samples (like curator.py does)."""
+    task_counts = Counter(s['taxonomy']['task_type'] for s in samples)
+    domain_counts = Counter(s['taxonomy']['domain_type'] for s in samples)
+    tone_counts = Counter(s['taxonomy']['question_tone'] for s in samples)
+    dirtiness_counts = Counter(s['taxonomy']['sample_dirtiness'] for s in samples)
+    
+    total = len(samples)
+    
+    task_dist = {task: count / total for task, count in task_counts.items()}
+    domain_dist = {domain: count / total for domain, count in domain_counts.items()}
+    tone_dist = {tone: count / total for tone, count in tone_counts.items()}
+    dirtiness_dist = {dirt: count / total for dirt, count in dirtiness_counts.items()}
+    
+    return {
+        'task_type': task_dist,
+        'domain_type': domain_dist,
+        'question_tone': tone_dist,
+        'sample_dirtiness': dirtiness_dist,
+        'task_counts': task_counts,
+        'domain_counts': domain_counts,
+        'tone_counts': tone_counts,
+        'dirtiness_counts': dirtiness_counts
+    }
+
+
+def ensure_coverage_samples(
     samples: List[Dict[str, Any]],
-    task_targets: Dict[str, float],
-    domain_targets: Dict[str, float],
-    total_size: int,
+    seed: int = 42
+) -> Tuple[List[Dict[str, Any]], set]:
+    """
+    PRIORITY 1: Ensure at least 1 sample from each unique combination of
+    (task_type, domain_type, question_tone).
+    Returns (coverage_samples, selected_ids_set).
+    """
+    random.seed(seed)
+    
+    # Group by (task_type, domain_type, question_tone)
+    combination_groups = defaultdict(list)
+    for sample in samples:
+        key = (
+            sample['taxonomy']['task_type'],
+            sample['taxonomy']['domain_type'],
+            sample['taxonomy']['question_tone']
+        )
+        combination_groups[key].append(sample)
+    
+    coverage_samples = []
+    selected_ids = set()
+    
+    print(f"\n[PRIORITY 1] Ensuring coverage: {len(combination_groups)} unique combinations")
+    
+    for (task_type, domain_type, question_tone), candidates in combination_groups.items():
+        if not candidates:
+            continue
+        
+        # Randomly select 1 sample from this combination
+        selected = random.choice(candidates)
+        coverage_samples.append(selected)
+        selected_ids.add(id(selected))
+    
+    print(f"  ✓ Selected {len(coverage_samples)} samples for full coverage")
+    
+    # Report coverage
+    task_types_covered = set(s['taxonomy']['task_type'] for s in coverage_samples)
+    domain_types_covered = set(s['taxonomy']['domain_type'] for s in coverage_samples)
+    tones_covered = set(s['taxonomy']['question_tone'] for s in coverage_samples)
+    
+    print(f"  Coverage: {len(task_types_covered)} task types, {len(domain_types_covered)} domain types, {len(tones_covered)} question tones")
+    
+    return coverage_samples, selected_ids
+
+
+def stratified_sample_by_distribution(
+    samples: List[Dict[str, Any]],
+    source_dist: Dict[str, Any],
+    target_size: int,
+    selected_ids: set,
     seed: int = 42
 ) -> List[Dict[str, Any]]:
     """
-    Sample to achieve target distributions.
-    Priority: task_type > domain_type
+    PRIORITY 2: Fill remaining slots using stratified sampling that matches
+    source distribution (like curator.py).
     """
-    print(f"\nStratified sampling for {total_size} samples...")
-    print(f"Task type targets: {task_targets}")
-    print(f"Domain type targets: {domain_targets}")
-    
     random.seed(seed)
     
-    # Group by task type
+    # Filter out already selected samples
+    available_samples = [s for s in samples if id(s) not in selected_ids]
+    
+    if len(available_samples) == 0:
+        print("  ⚠ No remaining samples available for distribution matching")
+        return []
+    
+    if target_size <= 0:
+        return []
+    
+    print(f"\n[PRIORITY 2] Stratified sampling: {target_size} slots remaining")
+    print(f"  Available samples: {len(available_samples):,}")
+    
+    # Compute target counts based on source distribution
+    task_dist = source_dist['task_type']
+    domain_dist = source_dist['domain_type']
+    
+    # Group available samples by task_type
     task_groups = defaultdict(list)
-    for sample in samples:
+    for sample in available_samples:
         task_type = sample['taxonomy']['task_type']
         task_groups[task_type].append(sample)
     
-    # Calculate how many samples needed per task type
+    # Allocate samples per task type based on source distribution
     task_allocations = {}
-    for task_type, ratio in task_targets.items():
-        target_count = int(total_size * ratio)
+    for task_type, ratio in task_dist.items():
+        target_count = max(1, int(target_size * ratio))  # At least 1 if ratio > 0
         available = len(task_groups.get(task_type, []))
         
         if available == 0:
-            print(f"Warning: No samples available for task type '{task_type}'")
             task_allocations[task_type] = 0
-        elif available < target_count:
-            print(f"Warning: Only {available} samples available for '{task_type}' (target: {target_count})")
-            task_allocations[task_type] = available
         else:
-            task_allocations[task_type] = target_count
+            task_allocations[task_type] = min(target_count, available)
     
-    # Adjust if we can't meet targets
+    # Adjust if we're under target_size
     total_allocated = sum(task_allocations.values())
-    if total_allocated < total_size:
-        print(f"Adjusting allocation: {total_allocated} < {total_size}")
-        # Distribute remaining across available groups
-        remaining = total_size - total_allocated
-        for task_type in task_allocations:
+    if total_allocated < target_size:
+        remaining = target_size - total_allocated
+        # Distribute remaining across task types proportionally
+        for task_type in sorted(task_allocations.keys(), key=lambda x: task_dist.get(x, 0), reverse=True):
+            if remaining <= 0:
+                break
             available = len(task_groups.get(task_type, []))
-            if available > task_allocations[task_type]:
-                can_add = min(remaining, available - task_allocations[task_type])
+            current = task_allocations[task_type]
+            if available > current:
+                can_add = min(remaining, available - current)
                 task_allocations[task_type] += can_add
                 remaining -= can_add
-                if remaining == 0:
-                    break
     
     # Sample from each task group, considering domain distribution
     selected = []
-    selected_ids = set()
+    new_selected_ids = set(selected_ids)
     
     for task_type, target_count in task_allocations.items():
         if target_count == 0:
@@ -425,25 +507,29 @@ def stratified_sample_by_targets(
         
         # Allocate by domain within task
         task_selected = []
-        for domain_type, domain_ratio in domain_targets.items():
-            domain_target = int(target_count * domain_ratio)
+        domain_dist_for_task = source_dist['domain_type']
+        
+        for domain_type, domain_ratio in domain_dist_for_task.items():
+            domain_target = max(1, int(target_count * domain_ratio))
             domain_candidates = domain_groups.get(domain_type, [])
             
             # Filter out already selected
-            domain_candidates = [s for s in domain_candidates if id(s) not in selected_ids]
+            domain_candidates = [s for s in domain_candidates if id(s) not in new_selected_ids]
             
             if len(domain_candidates) >= domain_target:
                 sampled = random.sample(domain_candidates, domain_target)
-            else:
+            elif len(domain_candidates) > 0:
                 sampled = domain_candidates
+            else:
+                sampled = []
             
             for s in sampled:
                 task_selected.append(s)
-                selected_ids.add(id(s))
+                new_selected_ids.add(id(s))
         
         # If we haven't reached target_count, add more from any domain
         if len(task_selected) < target_count:
-            remaining_candidates = [s for s in candidates if id(s) not in selected_ids]
+            remaining_candidates = [s for s in candidates if id(s) not in new_selected_ids]
             needed = target_count - len(task_selected)
             if len(remaining_candidates) >= needed:
                 additional = random.sample(remaining_candidates, needed)
@@ -452,7 +538,7 @@ def stratified_sample_by_targets(
             
             for s in additional:
                 task_selected.append(s)
-                selected_ids.add(id(s))
+                new_selected_ids.add(id(s))
         
         # If we have too many, trim randomly
         if len(task_selected) > target_count:
@@ -460,23 +546,104 @@ def stratified_sample_by_targets(
         
         selected.extend(task_selected)
     
-    print(f"Selected {len(selected)} samples")
-    
-    # Print actual distribution
-    task_counts = Counter(s['taxonomy']['task_type'] for s in selected)
-    domain_counts = Counter(s['taxonomy']['domain_type'] for s in selected)
-    
-    print("\nActual task type distribution:")
-    for task_type, count in sorted(task_counts.items()):
-        pct = count / len(selected) * 100
-        print(f"  {task_type:<30}: {count:>3} ({pct:>5.1f}%)")
-    
-    print("\nActual domain type distribution:")
-    for domain_type, count in sorted(domain_counts.items()):
-        pct = count / len(selected) * 100
-        print(f"  {domain_type:<30}: {count:>3} ({pct:>5.1f}%)")
+    print(f"  ✓ Selected {len(selected)} additional samples")
     
     return selected
+
+
+def stratified_sample_by_targets(
+    samples: List[Dict[str, Any]],
+    task_targets: Optional[Dict[str, float]],
+    domain_targets: Optional[Dict[str, float]],
+    total_size: int,
+    seed: int = 42
+) -> List[Dict[str, Any]]:
+    """
+    Two-phase stratified sampling:
+    1. PRIORITY 1: Ensure at least 1 sample from each (task_type, domain_type, question_tone) combination
+    2. PRIORITY 2: Fill remaining slots matching source distribution (like curator.py)
+    """
+    random.seed(seed)
+    
+    print(f"\n{'='*70}")
+    print(f"STRATIFIED SAMPLING (Total target: {total_size} samples)")
+    print(f"{'='*70}")
+    
+    # Compute source distribution
+    source_dist = compute_source_distribution(samples)
+    
+    print("\nSource distribution (task types):")
+    for task_type, ratio in sorted(source_dist['task_type'].items(), key=lambda x: x[1], reverse=True):
+        count = source_dist['task_counts'][task_type]
+        print(f"  {task_type:<30}: {count:>6,} ({ratio*100:>5.1f}%)")
+    
+    print("\nSource distribution (question tones):")
+    for tone, ratio in sorted(source_dist['question_tone'].items(), key=lambda x: x[1], reverse=True):
+        count = source_dist['tone_counts'][tone]
+        print(f"  {tone:<20}: {count:>6,} ({ratio*100:>5.1f}%)")
+    
+    # PRIORITY 1: Ensure coverage
+    coverage_samples, selected_ids = ensure_coverage_samples(samples, seed)
+    
+    # PRIORITY 2: Fill remaining slots
+    remaining_slots = total_size - len(coverage_samples)
+    
+    if remaining_slots > 0:
+        distribution_samples = stratified_sample_by_distribution(
+            samples,
+            source_dist,
+            remaining_slots,
+            selected_ids,
+            seed + 1
+        )
+        all_selected = coverage_samples + distribution_samples
+    else:
+        print(f"\n  ⚠ Coverage samples ({len(coverage_samples)}) exceed target size ({total_size})")
+        print(f"  Selecting {total_size} samples from coverage set...")
+        all_selected = random.sample(coverage_samples, min(total_size, len(coverage_samples)))
+    
+    # Shuffle final selection
+    random.shuffle(all_selected)
+    
+    print(f"\n{'='*70}")
+    print(f"FINAL SELECTION: {len(all_selected)} samples")
+    print(f"{'='*70}")
+    
+    # Print actual distribution
+    task_counts = Counter(s['taxonomy']['task_type'] for s in all_selected)
+    domain_counts = Counter(s['taxonomy']['domain_type'] for s in all_selected)
+    tone_counts = Counter(s['taxonomy']['question_tone'] for s in all_selected)
+    dirtiness_counts = Counter(s['taxonomy']['sample_dirtiness'] for s in all_selected)
+    
+    print("\nActual task type distribution:")
+    for task_type, count in sorted(task_counts.items(), key=lambda x: x[1], reverse=True):
+        pct = count / len(all_selected) * 100
+        source_pct = source_dist['task_type'].get(task_type, 0) * 100
+        diff = pct - source_pct
+        print(f"  {task_type:<30}: {count:>3} ({pct:>5.1f}%) [source: {source_pct:>5.1f}%, diff: {diff:>+6.1f}%]")
+    
+    print("\nActual domain type distribution:")
+    for domain_type, count in sorted(domain_counts.items(), key=lambda x: x[1], reverse=True):
+        pct = count / len(all_selected) * 100
+        source_pct = source_dist['domain_type'].get(domain_type, 0) * 100
+        diff = pct - source_pct
+        print(f"  {domain_type:<30}: {count:>3} ({pct:>5.1f}%) [source: {source_pct:>5.1f}%, diff: {diff:>+6.1f}%]")
+    
+    print("\nActual question tone distribution:")
+    for tone, count in sorted(tone_counts.items(), key=lambda x: x[1], reverse=True):
+        pct = count / len(all_selected) * 100
+        source_pct = source_dist['question_tone'].get(tone, 0) * 100
+        diff = pct - source_pct
+        print(f"  {tone:<20}: {count:>3} ({pct:>5.1f}%) [source: {source_pct:>5.1f}%, diff: {diff:>+6.1f}%]")
+    
+    print("\nActual sample dirtiness distribution:")
+    for dirt, count in sorted(dirtiness_counts.items(), key=lambda x: x[1], reverse=True):
+        pct = count / len(all_selected) * 100
+        source_pct = source_dist['sample_dirtiness'].get(dirt, 0) * 100
+        diff = pct - source_pct
+        print(f"  {dirt:<20}: {count:>3} ({pct:>5.1f}%) [source: {source_pct:>5.1f}%, diff: {diff:>+6.1f}%]")
+    
+    return all_selected
 
 
 # ============================================================================
@@ -701,27 +868,6 @@ def main():
                        help='Skip query execution')
     parser.add_argument('--seed', type=int, default=42,
                        help='Random seed (default: 42)')
-    
-    # Task type distribution targets
-    parser.add_argument('--task_simple_select', type=float, default=0.60,
-                       help='SIMPLE_SELECT ratio (default: 0.60)')
-    parser.add_argument('--task_sql_aggregation', type=float, default=0.10,
-                       help='SQL_AGGREGATION ratio (default: 0.10)')
-    parser.add_argument('--task_sql_join', type=float, default=0.05,
-                       help='SQL_JOIN ratio (default: 0.05)')
-    parser.add_argument('--task_spatial_measurement', type=float, default=0.10,
-                       help='SPATIAL_MEASUREMENT ratio (default: 0.10)')
-    parser.add_argument('--task_spatial_join', type=float, default=0.10,
-                       help='SPATIAL_JOIN ratio (default: 0.10)')
-    parser.add_argument('--task_spatial_accessor', type=float, default=0.05,
-                       help='SPATIAL_ACCESSOR ratio (default: 0.05)')
-    
-    # Domain type distribution targets
-    parser.add_argument('--domain_cim_vector', type=float, default=0.70,
-                       help='SINGLE_SCHEMA_CIM_VECTOR ratio (default: 0.70)')
-    parser.add_argument('--domain_other', type=float, default=0.30,
-                       help='SINGLE_SCHEMA_OTHER ratio (default: 0.30)')
-    
     parser.add_argument('--quality_threshold', type=float, default=0.0,
                        help='Minimum quality score (default: 0.0, no filtering)')
     
@@ -735,33 +881,12 @@ def main():
     
     output_path = Path(args.output)
     
-    # Build target distributions
-    task_targets = {
-        'SIMPLE_SELECT': args.task_simple_select,
-        'SQL_AGGREGATION': args.task_sql_aggregation,
-        'SQL_JOIN': args.task_sql_join,
-        'SPATIAL_MEASUREMENT': args.task_spatial_measurement,
-        'SPATIAL_JOIN': args.task_spatial_join,
-        'SPATIAL_ACCESSOR': args.task_spatial_accessor
-    }
-    
-    domain_targets = {
-        'SINGLE_SCHEMA_CIM_VECTOR': args.domain_cim_vector,
-        'SINGLE_SCHEMA_OTHER': args.domain_other
-    }
-    
-    # Validate targets sum to ~1.0
-    task_sum = sum(task_targets.values())
-    domain_sum = sum(domain_targets.values())
-    
-    if abs(task_sum - 1.0) > 0.01:
-        print(f"Warning: Task type ratios sum to {task_sum:.2f}, not 1.0")
-    
-    if abs(domain_sum - 1.0) > 0.01:
-        print(f"Warning: Domain type ratios sum to {domain_sum:.2f}, not 1.0")
-    
     print("="*70)
     print("TAXONOMY-BASED BENCHMARK GENERATOR v2")
+    print("="*70)
+    print("\nSampling Strategy:")
+    print("  PRIORITY 1: Ensure at least 1 sample from each (task_type, domain_type, question_tone) combination")
+    print("  PRIORITY 2: Fill remaining slots matching source distribution (like curator.py)")
     print("="*70)
     
     # Load dataset
@@ -776,13 +901,13 @@ def main():
     # Classify all samples
     samples = classify_all_samples(samples)
     
-    # Stratified sampling
+    # Stratified sampling (uses source distribution automatically)
     selected = stratified_sample_by_targets(
         samples,
-        task_targets,
-        domain_targets,
-        args.size,
-        args.seed
+        task_targets=None,  # Will use source distribution
+        domain_targets=None,  # Will use source distribution
+        total_size=args.size,
+        seed=args.seed
     )
     
     if len(selected) == 0:

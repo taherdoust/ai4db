@@ -240,20 +240,63 @@ def stratified_split(
 ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """Create train/val/test splits with optional stratification."""
     if strat_col:
+        # First split: train vs (val + test)
+        try:
         train_df, temp_df = train_test_split(
             df,
             test_size=(val_ratio + test_ratio),
             random_state=random_state,
             stratify=df[strat_col],
         )
+        except ValueError as e:
+            # If stratification fails (some groups too small), fall back to random
+            print(f"  Warning: Stratification failed for train/test split: {e}")
+            print(f"  Falling back to random split for train/test")
+            train_df, temp_df = train_test_split(
+                df,
+                test_size=(val_ratio + test_ratio),
+                random_state=random_state,
+                shuffle=True,
+            )
+        
+        # Second split: val vs test
         val_share = test_ratio / (val_ratio + test_ratio)
+        
+        # Check if we can stratify the val/test split
+        # Count samples per group in temp_df
+        group_counts = temp_df[strat_col].value_counts()
+        min_group_size = min(group_counts) if len(group_counts) > 0 else 0
+        
+        if min_group_size >= 2:
+            # Can stratify
+            try:
         val_df, test_df = train_test_split(
             temp_df,
             test_size=val_share,
             random_state=random_state,
             stratify=temp_df[strat_col],
+                )
+            except ValueError as e:
+                # If stratification fails, fall back to random
+                print(f"  Warning: Stratification failed for val/test split: {e}")
+                print(f"  Falling back to random split for val/test")
+                val_df, test_df = train_test_split(
+                    temp_df,
+                    test_size=val_share,
+                    random_state=random_state,
+                    shuffle=True,
+                )
+        else:
+            # Groups too small, use random split
+            print(f"  Warning: Some groups have < 2 samples, using random split for val/test")
+            val_df, test_df = train_test_split(
+                temp_df,
+                test_size=val_share,
+                random_state=random_state,
+                shuffle=True,
         )
     else:
+        # No stratification, use random splits
         train_df, temp_df = train_test_split(
             df,
             test_size=(val_ratio + test_ratio),

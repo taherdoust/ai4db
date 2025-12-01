@@ -358,7 +358,7 @@ def classify_sample(sql: str, question: str, original_sample: Optional[Dict[str,
             task_frequency = original_sample.get('task_frequency', 1)
             task_description = TASK_TAXONOMY.get(task_type, {}).get('description', '')
         else:
-            task_type, task_meta = classify_task_type(sql)
+    task_type, task_meta = classify_task_type(sql)
             task_complexity = task_meta["complexity"]
             task_frequency = task_meta["frequency"]
             task_description = task_meta["description"]
@@ -369,7 +369,7 @@ def classify_sample(sql: str, question: str, original_sample: Optional[Dict[str,
             domain_frequency = original_sample.get('domain_frequency', 1)
             domain_description = DOMAIN_TAXONOMY.get(domain_type, {}).get('description', '')
         else:
-            domain_type, domain_meta = classify_domain_type(sql)
+    domain_type, domain_meta = classify_domain_type(sql)
             domain_complexity = domain_meta["complexity"]
             domain_frequency = domain_meta["frequency"]
             domain_description = domain_meta["description"]
@@ -390,7 +390,7 @@ def classify_sample(sql: str, question: str, original_sample: Optional[Dict[str,
         domain_frequency = domain_meta["frequency"]
         domain_description = domain_meta["description"]
         
-        question_tone = classify_question_tone(question)
+    question_tone = classify_question_tone(question)
         sample_dirtiness = 'CLEAN'
     
     schemas = get_schemas_used(sql)

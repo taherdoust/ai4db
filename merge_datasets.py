@@ -4,8 +4,12 @@ merge_datasets.py
 Dataset Merger for Phase 4 Pipeline
 ====================================
 
-Merges positive samples from Stages 1-3 with negative samples,
-ensuring standardized classification throughout the pipeline.
+Merges positive samples from Stage 1 (rule-based) and Stage 3 (augmented) 
+with negative samples, ensuring standardized classification throughout the pipeline.
+
+Note: Stage 3 output does NOT include Stage 1 samples - they are separate.
+If you want both original (Stage 1) and augmented (Stage 3) samples in your
+training set, use --stage1 to include Stage 1 output.
 
 Standardized Classification Schema:
 - schema_complexity: SINGLE_SCHEMA_CIM_VECTOR, MULTI_SCHEMA_WITH_CIM_VECTOR, 
@@ -16,11 +20,28 @@ Standardized Classification Schema:
 - sample_type: POSITIVE or NEGATIVE
 
 Usage:
+    # Merge Stage 3 + Negative samples
     python merge_datasets.py \
         --positive training_datasets/stage3_augmented_dataset.jsonl \
         --negative negative_samples.jsonl \
         --output training_datasets/merged_dataset_phase4.jsonl \
         --target_size 150000
+    
+    # Merge Stage 1 + Stage 3 + Negative samples (recommended)
+    python merge_datasets.py \
+        --stage1 training_datasets/stage1_v2_dataset_frequency.jsonl \
+        --positive training_datasets/stage3_augmented_dataset.jsonl \
+        --negative negative_samples.jsonl \
+        --output training_datasets/merged_dataset_phase4.jsonl \
+        --target_size 150000
+    
+    # Use ALL available samples (ignoring ratio)
+    python merge_datasets.py \
+        --stage1 training_datasets/stage1_v2_dataset_frequency.jsonl \
+        --positive training_datasets/stage3_augmented_dataset.jsonl \
+        --negative negative_samples.jsonl \
+        --output training_datasets/merged_dataset_phase4.jsonl \
+        --use_all_samples
 
 Author: Ali Taherdoust
 Date: November 2024
@@ -316,19 +337,24 @@ def merge_datasets(
     negative_samples: List[Dict[str, Any]],
     target_size: Optional[int] = None,
     negative_ratio: float = 0.20,
+    use_all_samples: bool = False,
     random_seed: int = 42
 ) -> List[Dict[str, Any]]:
     """
-    Merge positive and negative samples, respecting negative ratio.
+    Merge positive and negative samples, respecting negative ratio or using all samples.
     
-    The function uses all available samples while maintaining the target negative ratio
-    as closely as possible. If target_size is provided, it acts as a maximum cap.
+    The function can either:
+    1. Use all available samples (if use_all_samples=True)
+    2. Maintain target negative ratio (if use_all_samples=False)
+    
+    If target_size is provided, it acts as a maximum cap.
     
     Args:
         positive_samples: Positive training samples
         negative_samples: Negative training samples
         target_size: Optional maximum total dataset size (if None, uses all available)
-        negative_ratio: Target ratio of negative samples (0.20 = 20%)
+        negative_ratio: Target ratio of negative samples (0.20 = 20%) - ignored if use_all_samples=True
+        use_all_samples: If True, use all available samples regardless of ratio
         random_seed: Random seed for reproducibility
     
     Returns:
@@ -355,45 +381,52 @@ def merge_datasets(
     print(f"\nMerging datasets:")
     print(f"  Available positive: {available_positive:,}")
     print(f"  Available negative: {available_negative:,}")
-    print(f"  Target negative ratio: {negative_ratio:.1%}")
-    if target_size:
-        print(f"  Target max size: {target_size:,}")
     
-    # Calculate how many negatives we need based on available positives
-    # To achieve negative_ratio: neg / (pos + neg) = ratio
-    # Solving: neg = pos * ratio / (1 - ratio)
-    if available_positive > 0:
-        required_negative = int(available_positive * negative_ratio / (1 - negative_ratio))
-    else:
-        required_negative = 0
-    
-    # Determine actual counts based on what's available
-    if available_negative >= required_negative:
-        # We have enough negatives - use required amount to maintain ratio
-        actual_negative = min(required_negative, available_negative)
+    if use_all_samples:
+        print(f"  Mode: Use ALL available samples (ignoring ratio)")
         actual_positive = available_positive
-    else:
-        # Not enough negatives - use all negatives, adjust positives to maintain ratio
         actual_negative = available_negative
-        if actual_negative > 0:
-            # Calculate how many positives we need: pos = neg * (1 - ratio) / ratio
-            required_positive = int(actual_negative * (1 - negative_ratio) / negative_ratio)
-            actual_positive = min(required_positive, available_positive)
+    else:
+        print(f"  Mode: Maintain negative ratio")
+        print(f"  Target negative ratio: {negative_ratio:.1%}")
+        if target_size:
+            print(f"  Target max size: {target_size:,}")
+        
+        # Calculate how many negatives we need based on available positives
+        # To achieve negative_ratio: neg / (pos + neg) = ratio
+        # Solving: neg = pos * ratio / (1 - ratio)
+        if available_positive > 0:
+            required_negative = int(available_positive * negative_ratio / (1 - negative_ratio))
         else:
-            # No negatives available - use all positives
+            required_negative = 0
+        
+        # Determine actual counts based on what's available
+        if available_negative >= required_negative:
+            # We have enough negatives - use required amount to maintain ratio
+            actual_negative = min(required_negative, available_negative)
             actual_positive = available_positive
-    
-    # Apply target_size cap if provided
-    if target_size:
-        current_total = actual_positive + actual_negative
-        if current_total > target_size:
-            # Scale down proportionally while maintaining ratio
-            scale = target_size / current_total
-            actual_positive = int(actual_positive * scale)
-            actual_negative = int(actual_negative * scale)
-            # Ensure we don't exceed available samples
-            actual_positive = min(actual_positive, available_positive)
-            actual_negative = min(actual_negative, available_negative)
+        else:
+            # Not enough negatives - use all negatives, adjust positives to maintain ratio
+            actual_negative = available_negative
+            if actual_negative > 0:
+                # Calculate how many positives we need: pos = neg * (1 - ratio) / ratio
+                required_positive = int(actual_negative * (1 - negative_ratio) / negative_ratio)
+                actual_positive = min(required_positive, available_positive)
+            else:
+                # No negatives available - use all positives
+                actual_positive = available_positive
+        
+        # Apply target_size cap if provided
+        if target_size:
+            current_total = actual_positive + actual_negative
+            if current_total > target_size:
+                # Scale down proportionally while maintaining ratio
+                scale = target_size / current_total
+                actual_positive = int(actual_positive * scale)
+                actual_negative = int(actual_negative * scale)
+                # Ensure we don't exceed available samples
+                actual_positive = min(actual_positive, available_positive)
+                actual_negative = min(actual_negative, available_negative)
     
     # Sample if we have more than needed
     if len(standardized_positive) > actual_positive:
@@ -420,11 +453,14 @@ def merge_datasets(
     print(f"  Negative: {len(standardized_negative):,} ({len(standardized_negative)/len(merged)*100:.1f}%)")
     print(f"  Actual negative ratio: {actual_ratio:.1%}")
     
-    if target_size and len(merged) < target_size:
-        print(f"  Note: Target size {target_size:,} not reached (only {len(merged):,} samples available)")
-    if abs(actual_ratio - negative_ratio) > 0.05:
-        print(f"  Warning: Actual ratio ({actual_ratio:.1%}) differs from target ({negative_ratio:.1%})")
-        print(f"           This is because available samples don't allow exact ratio matching.")
+    if use_all_samples:
+        print(f"  Note: All available samples used (ratio not enforced)")
+    else:
+        if target_size and len(merged) < target_size:
+            print(f"  Note: Target size {target_size:,} not reached (only {len(merged):,} samples available)")
+        if abs(actual_ratio - negative_ratio) > 0.05:
+            print(f"  Warning: Actual ratio ({actual_ratio:.1%}) differs from target ({negative_ratio:.1%})")
+            print(f"           This is because available samples don't allow exact ratio matching.")
     
     return merged
 
@@ -546,11 +582,21 @@ def print_statistics(stats: Dict[str, Any]):
 def main():
     parser = argparse.ArgumentParser(
         description='Merge positive and negative datasets with standardized classification',
-        formatter_class=argparse.RawDescriptionHelpFormatter
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Merge Stage 3 + Negative samples
+  python merge_datasets.py --positive stage3_output.jsonl --negative negative_samples.jsonl --output merged.jsonl
+
+  # Merge Stage 1 + Stage 3 + Negative samples
+  python merge_datasets.py --stage1 stage1_output.jsonl --positive stage3_output.jsonl --negative negative_samples.jsonl --output merged.jsonl
+        """
     )
     
+    parser.add_argument('--stage1', type=Path, default=None,
+                       help='Path to Stage 1 output (rule-based samples). Optional - if provided, will be combined with Stage 3 as positive samples.')
     parser.add_argument('--positive', type=Path, required=True,
-                       help='Path to positive samples (stage3 output)')
+                       help='Path to positive samples (Stage 3 augmented output)')
     parser.add_argument('--negative', type=Path, required=True,
                        help='Path to negative samples')
     parser.add_argument('--output', type=Path, required=True,
@@ -558,7 +604,9 @@ def main():
     parser.add_argument('--target_size', type=int, default=None,
                        help='Optional maximum total dataset size. If not provided, uses all available samples while respecting negative ratio.')
     parser.add_argument('--negative_ratio', type=float, default=0.20,
-                       help='Target ratio of negative samples (default: 0.20)')
+                       help='Target ratio of negative samples (default: 0.20). Ignored if --use_all_samples is set.')
+    parser.add_argument('--use_all_samples', action='store_true',
+                       help='Use ALL available samples from all sources, ignoring negative ratio. Overrides --negative_ratio.')
     parser.add_argument('--seed', type=int, default=42,
                        help='Random seed for reproducibility')
     
@@ -567,17 +615,36 @@ def main():
     print("="*80)
     print("PHASE 4 DATASET MERGER")
     print("="*80)
-    print(f"Positive samples: {args.positive}")
+    if args.stage1:
+        print(f"Stage 1 samples: {args.stage1}")
+    print(f"Stage 3 samples: {args.positive}")
     print(f"Negative samples: {args.negative}")
     print(f"Output file: {args.output}")
     if args.target_size:
         print(f"Target max size: {args.target_size:,}")
     else:
         print(f"Target max size: None (using all available samples)")
-    print(f"Negative ratio: {args.negative_ratio:.1%}")
+    if args.use_all_samples:
+        print(f"Mode: Use ALL available samples (ignoring ratio)")
+    else:
+        print(f"Negative ratio: {args.negative_ratio:.1%}")
     
     # Load datasets
-    positive_samples = load_dataset(args.positive)
+    stage3_samples = load_dataset(args.positive)
+    
+    # Load Stage 1 if provided
+    stage1_samples = []
+    if args.stage1:
+        stage1_samples = load_dataset(args.stage1)
+        print(f"\nCombining Stage 1 + Stage 3 as positive samples...")
+        print(f"  Stage 1: {len(stage1_samples):,} samples")
+        print(f"  Stage 3: {len(stage3_samples):,} samples")
+        positive_samples = stage1_samples + stage3_samples
+        print(f"  Combined positive: {len(positive_samples):,} samples")
+    else:
+        positive_samples = stage3_samples
+        print(f"\nUsing Stage 3 only as positive samples: {len(positive_samples):,} samples")
+    
     negative_samples = load_dataset(args.negative)
     
     # Merge datasets
@@ -586,6 +653,7 @@ def main():
         negative_samples,
         target_size=args.target_size,
         negative_ratio=args.negative_ratio,
+        use_all_samples=args.use_all_samples,
         random_seed=args.seed
     )
     
